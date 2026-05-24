@@ -1,0 +1,16 @@
+XRD Atlas Windows self-test report
+Created: 2026/05/24 ﬂL»’ 14:49:07.82
+XRD Atlas folder: C:\Users\AORUS\Desktop\xrd_atlas
+Windows version:
+
+Microsoft Windows [∞Ê±æ 10.0.26200.8457]
+Processor architecture: AMD64
+
+XRD Atlas Windows self-test
+
+Report saved to: C:\Users\AORUS\Desktop\xrd_atlas\xrd_atlas_self_test_report.txt
+
+Missing XRD Atlas.exe
+
+Self-test failed. Copy the whole XRD Atlas folder and try again.
+Please send xrd_atlas_self_test_report.txt when asking for help.
