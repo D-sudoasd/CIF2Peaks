@@ -13,7 +13,7 @@ import numpy as np
 
 from .models import ExperimentalPattern, XrdAtlasExportPayload, XrdAtlasPeakRow, XrdPhase
 from .service import phase_peak_rows
-from .utils import now_iso, package_versions
+from .utils import friendly_cif_issue_message, now_iso, package_versions
 
 
 PEAK_HEADERS = [
@@ -50,6 +50,20 @@ PEAK_REFERENCE_HEADERS = [
     "relative_intensity",
     "multiplicity",
     "warnings",
+]
+
+BEGINNER_PEAK_HEADERS = [
+    "相名",
+    "CIF 文件",
+    "化学式",
+    "空间群",
+    "晶面 hkl",
+    "d 间距 (Å)",
+    "2θ 当前设置 (°)",
+    "2θ Cu Kα (°)",
+    "相对强度",
+    "多重性",
+    "提示",
 ]
 
 
@@ -153,7 +167,7 @@ def _summary_rows(payload: XrdAtlasExportPayload) -> list[list[Any]]:
                 phase.display_space_group,
                 phase.enabled,
                 0 if phase.result is None else len(phase.result.peaks),
-                phase.error or "",
+                friendly_cif_issue_message(phase.error, []),
                 " | ".join(phase.warning_messages),
             ]
         )
@@ -166,6 +180,34 @@ def _experimental_rows(patterns: list[ExperimentalPattern]) -> list[list[Any]]:
         for x_value, intensity in zip(pattern.x_values, pattern.intensity, strict=True):
             rows.append([pattern.label, str(pattern.path), pattern.axis_mode, float(x_value), float(intensity)])
     return rows
+
+
+def _user_guide_rows(payload: XrdAtlasExportPayload) -> list[list[Any]]:
+    return [
+        ["XRD Atlas 使用说明", ""],
+        ["这是什么", "从 CIF 晶体结构计算理论粉末 XRD 峰表，便于在 Excel、Origin 或 Python 中继续分析。"],
+        ["默认参数", f"{payload.settings.source_preset}，2θ {payload.settings.two_theta_min_deg:g}-{payload.settings.two_theta_max_deg:g}°"],
+        ["最快使用", "普通用户先看 推荐峰表；需要英文列名或完整字段时再看 Combined Peaks。"],
+        ["注意", "这是理论峰表，不是实验谱拟合、物相检索数据库或 Rietveld 精修。"],
+        [],
+        ["工作表", "内容"],
+        ["Summary", "导出参数、每个 CIF 的读取状态、错误和警告。"],
+        ["推荐峰表", "中文列名的常用峰表，适合直接查看、筛选和复制到 Origin。"],
+        ["Combined Peaks", "英文列名的完整合并峰表，适合程序读取或后续批处理。"],
+        ["各相工作表", "单个 CIF/相的峰表，名称来自 CIF 文件名。"],
+        [],
+        ["常用列名", "含义"],
+        ["phase_name", "相名，默认来自 CIF 文件名。"],
+        ["cif_name", "原始 CIF 文件名。"],
+        ["formula", "程序从 CIF 读取到的化学式。"],
+        ["space_group", "空间群。"],
+        ["hkl", "晶面指数。"],
+        ["d_A", "晶面间距 d，单位 Å。"],
+        ["two_theta_current_deg", "当前设置下的 2θ 位置，单位 °。"],
+        ["two_theta_cu_ka_deg", "Cu Kα 条件下的 2θ 位置，单位 °。"],
+        ["relative_intensity", "归一化相对强度，最强峰为 100。"],
+        ["warnings", "CIF 读取或计算过程中的提示；为空通常表示无明显问题。"],
+    ]
 
 
 def export_xrd_atlas_json(payload: XrdAtlasExportPayload, output_path: str | Path) -> None:
@@ -229,6 +271,86 @@ def _xlsx_cell(ref: str, value: Any) -> str:
     return f'<c r="{ref}" t="inlineStr"><is><t>{text}</t></is></c>'
 
 
+def _table_column_widths(headers: list[Any]) -> list[int]:
+    default_widths = {
+        "phase_name": 24,
+        "cif_name": 28,
+        "formula": 16,
+        "space_group": 16,
+        "hkl": 12,
+        "d_A": 12,
+        "two_theta_current_deg": 20,
+        "two_theta_deg": 16,
+        "two_theta_cu_ka_deg": 20,
+        "relative_intensity": 18,
+        "multiplicity": 14,
+        "warnings": 42,
+        "family_label": 18,
+        "g_1_over_A": 14,
+        "q_1_over_A": 14,
+        "theta_deg": 12,
+        "相名": 22,
+        "CIF 文件": 28,
+        "化学式": 16,
+        "空间群": 16,
+        "晶面 hkl": 12,
+        "d 间距 (Å)": 14,
+        "2θ 当前设置 (°)": 20,
+        "2θ Cu Kα (°)": 18,
+        "相对强度": 14,
+        "多重性": 12,
+        "提示": 42,
+    }
+    return [default_widths.get(str(header), max(10, min(24, len(str(header)) + 2))) for header in headers]
+
+
+def _is_table_sheet(rows: list[list[Any]]) -> bool:
+    if not rows:
+        return False
+    headers = [str(value) for value in rows[0]]
+    return (
+        headers == PEAK_HEADERS
+        or headers == BEGINNER_PEAK_HEADERS
+        or headers == ["pattern_label", "source_file", "axis_mode", "x", "relative_intensity"]
+    )
+
+
+def _is_user_guide_sheet(rows: list[list[Any]]) -> bool:
+    return bool(rows and rows[0] and rows[0][0] == "XRD Atlas 使用说明")
+
+
+def _table_sheet_preamble(rows: list[list[Any]]) -> str:
+    if _is_user_guide_sheet(rows):
+        return (
+            '<cols>'
+            '<col min="1" max="1" width="24" customWidth="1"/>'
+            '<col min="2" max="2" width="88" customWidth="1"/>'
+            "</cols>"
+        )
+    if not _is_table_sheet(rows):
+        return ""
+    widths = _table_column_widths(rows[0])
+    cols = "".join(
+        f'<col min="{index}" max="{index}" width="{width}" customWidth="1"/>'
+        for index, width in enumerate(widths, start=1)
+    )
+    return (
+        '<sheetViews><sheetView workbookViewId="0">'
+        '<pane ySplit="1" topLeftCell="A2" activePane="bottomLeft" state="frozen"/>'
+        '<selection pane="bottomLeft"/>'
+        "</sheetView></sheetViews>"
+        f"<cols>{cols}</cols>"
+    )
+
+
+def _table_sheet_postamble(rows: list[list[Any]]) -> str:
+    if not _is_table_sheet(rows):
+        return ""
+    last_column = _xlsx_column_name(len(rows[0]))
+    last_row = max(1, len(rows))
+    return f'<autoFilter ref="A1:{last_column}{last_row}"/>'
+
+
 def _sheet_xml(rows: list[list[Any]]) -> str:
     xml_rows = []
     for row_index, row in enumerate(rows, start=1):
@@ -239,7 +361,7 @@ def _sheet_xml(rows: list[list[Any]]) -> str:
     return (
         '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
         '<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">'
-        f'<sheetData>{"".join(xml_rows)}</sheetData>'
+        f'{_table_sheet_preamble(rows)}<sheetData>{"".join(xml_rows)}</sheetData>{_table_sheet_postamble(rows)}'
         "</worksheet>"
     )
 
@@ -261,15 +383,40 @@ def _peak_rows_for_sheet(rows: list[dict[str, Any]]) -> list[list[Any]]:
     return [PEAK_HEADERS, *[[row.get(header, "") for header in PEAK_HEADERS] for row in rows]]
 
 
+def _beginner_peak_rows_for_sheet(rows: list[dict[str, Any]]) -> list[list[Any]]:
+    return [
+        BEGINNER_PEAK_HEADERS,
+        *[
+            [
+                row.get("phase_name", ""),
+                row.get("cif_name", ""),
+                row.get("formula", ""),
+                row.get("space_group", ""),
+                row.get("hkl", ""),
+                row.get("d_A", ""),
+                row.get("two_theta_current_deg", ""),
+                row.get("two_theta_cu_ka_deg", ""),
+                row.get("relative_intensity", ""),
+                row.get("multiplicity", ""),
+                row.get("warnings", ""),
+            ]
+            for row in rows
+        ],
+    ]
+
+
 def export_xrd_atlas_workbook(payload: XrdAtlasExportPayload, output_path: str | Path) -> None:
     sheets: list[tuple[str, list[list[Any]]]] = []
     used: set[str] = set()
+    combined_rows = combined_peak_rows(payload.phases)
     sheets.append((_safe_sheet_name("Summary", used), _summary_rows(payload)))
-    sheets.append((_safe_sheet_name("Combined Peaks", used), _peak_rows_for_sheet(combined_peak_rows(payload.phases))))
+    sheets.append((_safe_sheet_name("Combined Peaks", used), _peak_rows_for_sheet(combined_rows)))
+    sheets.append((_safe_sheet_name("推荐峰表", used), _beginner_peak_rows_for_sheet(combined_rows)))
     for phase in payload.phases:
         sheets.append((_safe_sheet_name(phase.phase_name, used), _peak_rows_for_sheet(combined_peak_rows([phase]))))
     if payload.experimental_patterns:
         sheets.append((_safe_sheet_name("Experimental Data", used), _experimental_rows(payload.experimental_patterns)))
+    sheets.append((_safe_sheet_name("使用说明", used), _user_guide_rows(payload)))
 
     with ZipFile(Path(output_path), "w", ZIP_DEFLATED) as archive:
         content_overrides = [
@@ -312,6 +459,7 @@ def export_xrd_atlas_workbook(payload: XrdAtlasExportPayload, output_path: str |
             '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
             '<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" '
             'xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">'
+            f'<bookViews><workbookView activeTab="{len(sheets) - 1}"/></bookViews>'
             f'<sheets>{"".join(sheet_defs)}</sheets></workbook>',
         )
         archive.writestr(

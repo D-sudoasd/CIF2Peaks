@@ -43,11 +43,15 @@ dependencies = [
 dev = [
   "pytest>=9.0.2",
 ]
+windows = [
+  "pyinstaller>=6.11",
+]
 
 [project.scripts]
 xrd-atlas = "xrd_atlas.batch:main"
 xrd-atlas-peaks = "xrd_atlas.batch:main"
 xrd-atlas-gui = "xrd_atlas.gui:main"
+xrd-atlas-quick-export = "xrd_atlas.quick_export:main"
 
 [project.urls]
 Homepage = "https://github.com/D-sudoasd/xrd_atlas"
