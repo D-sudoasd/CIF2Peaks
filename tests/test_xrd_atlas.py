@@ -656,12 +656,14 @@ def test_batch_cli_default_output_is_excel(tmp_path: Path) -> None:
 
 
 def test_simple_gui_builds_energy_settings_from_user_inputs() -> None:
+    from xrd_atlas.constants import X_RAY_ENERGY_WAVELENGTH_KEV_A
     from xrd_atlas.gui import build_gui_settings
 
     settings = build_gui_settings("20.0", "5", "120")
 
     assert settings.input_mode == "energy"
     assert settings.energy_keV == 20.0
+    assert np.isclose(settings.wavelength_A, X_RAY_ENERGY_WAVELENGTH_KEV_A / 20.0)
     assert settings.two_theta_min_deg == 5.0
     assert settings.two_theta_max_deg == 120.0
 
@@ -675,6 +677,26 @@ def test_beginner_gui_defaults_to_cu_ka_without_user_parameters() -> None:
     assert settings.source_preset == "Cu Ka"
     assert settings.two_theta_min_deg == 0.0
     assert settings.two_theta_max_deg == 180.0
+
+
+def test_beginner_gui_keeps_cu_ka_when_energy_is_blank() -> None:
+    from xrd_atlas.gui import build_beginner_gui_settings
+
+    settings = build_beginner_gui_settings(energy_keV=" ")
+
+    assert settings.input_mode == "source"
+    assert settings.source_preset == "Cu Ka"
+
+
+def test_beginner_gui_uses_custom_energy_when_provided() -> None:
+    from xrd_atlas.gui import build_beginner_gui_settings
+
+    settings = build_beginner_gui_settings(energy_keV="20.0", two_theta_min="5", two_theta_max="120")
+
+    assert settings.input_mode == "energy"
+    assert settings.energy_keV == 20.0
+    assert settings.two_theta_min_deg == 5.0
+    assert settings.two_theta_max_deg == 120.0
 
 
 def test_beginner_gui_suggests_clear_output_path(tmp_path: Path) -> None:
@@ -692,6 +714,7 @@ def test_beginner_gui_turns_common_errors_into_chinese_guidance() -> None:
 
     assert "请先添加" in friendly_error_message(ValueError("Select at least one CIF file."))
     assert "数字" in friendly_error_message(ValueError("2theta min must be a number."))
+    assert "能量" in friendly_error_message(ValueError("X-ray energy keV must be greater than 0."))
     assert "被 Excel 打开" in friendly_error_message(PermissionError("locked"))
 
 

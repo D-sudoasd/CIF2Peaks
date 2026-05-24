@@ -7,7 +7,7 @@ import sys
 from collections.abc import Callable
 from typing import Sequence
 
-from .constants import DEFAULT_XRD_SOURCE
+from .constants import DEFAULT_XRD_SOURCE, X_RAY_ENERGY_WAVELENGTH_KEV_A
 from .exporters import export_xrd_atlas_workbook
 from .models import XrdAtlasExportPayload, XrdAtlasSettings
 from .service import XrdAtlasService
@@ -64,6 +64,7 @@ def build_gui_settings(
     return XrdAtlasSettings(
         input_mode="energy",
         energy_keV=energy,
+        wavelength_A=X_RAY_ENERGY_WAVELENGTH_KEV_A / energy,
         two_theta_min_deg=min_deg,
         two_theta_max_deg=max_deg,
     )
@@ -72,7 +73,11 @@ def build_gui_settings(
 def build_beginner_gui_settings(
     two_theta_min: str | float = 0.0,
     two_theta_max: str | float = 180.0,
+    energy_keV: str | float | None = None,
 ) -> XrdAtlasSettings:
+    if energy_keV is not None and str(energy_keV).strip():
+        return build_gui_settings(energy_keV, two_theta_min, two_theta_max)
+
     min_deg = _parse_float(two_theta_min, "2theta min")
     max_deg = _parse_float(two_theta_max, "2theta max")
     if min_deg < 0 or max_deg > 180 or min_deg >= max_deg:
@@ -139,6 +144,8 @@ def friendly_error_message(exc: Exception) -> str:
         return "请先添加至少一个 CIF 文件。"
     if "must be a number" in lower:
         return "参数需要填写数字。也可以直接使用默认设置。"
+    if "x-ray energy kev must be greater than 0" in lower:
+        return "X 射线能量需要大于 0 keV。也可以留空使用默认 Cu Kα。"
     if "2theta range" in lower:
         return "2θ 范围需要满足 0 <= 最小值 < 最大值 <= 180。"
     if isinstance(exc, FileNotFoundError) or "missing cif" in lower:
@@ -193,11 +200,7 @@ def run_simple_gui_export(
     if missing:
         raise FileNotFoundError("Missing CIF file(s): " + "; ".join(missing))
 
-    settings = (
-        build_beginner_gui_settings(two_theta_min, two_theta_max)
-        if energy_keV is None
-        else build_gui_settings(energy_keV, two_theta_min, two_theta_max)
-    )
+    settings = build_beginner_gui_settings(two_theta_min, two_theta_max, energy_keV)
     service = XrdAtlasService()
     phases = service.load_phases(resolved_cifs)
     service.simulate_phases(phases, settings)
@@ -284,6 +287,7 @@ def _launch_tk_app(initial_paths: Sequence[str | Path] = ()) -> None:
     last_output_path: Path | None = None
     preview_generation = 0
     advanced_visible = tk.BooleanVar(value=False)
+    energy_var = tk.StringVar(value="")
     min_var = tk.StringVar(value="0")
     max_var = tk.StringVar(value="180")
     output_var = tk.StringVar(value=str(suggest_output_path(selected_paths)))
@@ -416,7 +420,9 @@ def _launch_tk_app(initial_paths: Sequence[str | Path] = ()) -> None:
     advanced_frame = ttk.Frame(settings_panel)
 
     def update_settings_summary() -> None:
-        settings_summary_var.set(f"默认设置：Cu Kα，2θ {min_var.get()}-{max_var.get()}°")
+        energy_text = energy_var.get().strip()
+        source_text = f"自定义能量：{energy_text} keV" if energy_text else "默认设置：Cu Kα"
+        settings_summary_var.set(f"{source_text}，2θ {min_var.get()}-{max_var.get()}°")
 
     def toggle_advanced() -> None:
         if advanced_visible.get():
@@ -432,11 +438,14 @@ def _launch_tk_app(initial_paths: Sequence[str | Path] = ()) -> None:
         pady=(8, 0),
     )
     advanced_frame.columnconfigure(1, weight=1)
-    ttk.Label(advanced_frame, text="2θ 最小值").grid(row=0, column=0, sticky="w", pady=4)
-    ttk.Entry(advanced_frame, textvariable=min_var, width=10).grid(row=0, column=1, sticky="w", pady=4)
-    ttk.Label(advanced_frame, text="2θ 最大值").grid(row=1, column=0, sticky="w", pady=4)
-    ttk.Entry(advanced_frame, textvariable=max_var, width=10).grid(row=1, column=1, sticky="w", pady=4)
-    ttk.Label(advanced_frame, text="普通用户保持默认即可。").grid(row=2, column=0, columnspan=2, sticky="w", pady=(4, 0))
+    ttk.Label(advanced_frame, text="X 射线能量 keV").grid(row=0, column=0, sticky="w", pady=4)
+    ttk.Entry(advanced_frame, textvariable=energy_var, width=10).grid(row=0, column=1, sticky="w", pady=4)
+    ttk.Label(advanced_frame, text="2θ 最小值").grid(row=1, column=0, sticky="w", pady=4)
+    ttk.Entry(advanced_frame, textvariable=min_var, width=10).grid(row=1, column=1, sticky="w", pady=4)
+    ttk.Label(advanced_frame, text="2θ 最大值").grid(row=2, column=0, sticky="w", pady=4)
+    ttk.Entry(advanced_frame, textvariable=max_var, width=10).grid(row=2, column=1, sticky="w", pady=4)
+    ttk.Label(advanced_frame, text="能量留空则使用默认 Cu Kα。").grid(row=3, column=0, columnspan=2, sticky="w", pady=(4, 0))
+    energy_var.trace_add("write", lambda *_: update_settings_summary())
     min_var.trace_add("write", lambda *_: update_settings_summary())
     max_var.trace_add("write", lambda *_: update_settings_summary())
 
@@ -518,6 +527,7 @@ def _launch_tk_app(initial_paths: Sequence[str | Path] = ()) -> None:
                 result = run_simple_gui_export(
                     selected_paths,
                     output_var.get(),
+                    energy_keV=energy_var.get(),
                     two_theta_min=min_var.get(),
                     two_theta_max=max_var.get(),
                 )
