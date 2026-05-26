@@ -15,8 +15,9 @@ into Excel for follow-up work in Excel, Origin, Python, or lab notebooks.
   - `Combined Peaks`
   - one sheet per phase
 - Use the desktop GUI for non-programming workflows.
+- Drag CIF files or CIF folders directly into the GUI window.
 - Use the CLI for reproducible batch processing.
-- Choose common X-ray sources or enter custom energy / wavelength.
+- Choose visible GUI X-ray presets (`Cu Kα`, `30 keV`, `83 keV`) or enter a manual energy.
 - Keep going when one CIF fails; errors and warnings are written to `Summary`.
 - Handles common multi-block CIF files by selecting the structural block.
 
@@ -45,11 +46,13 @@ py -3.11 -m xrd_atlas.gui
 
 Basic workflow:
 
-1. Click `Add files` or `Add folder`.
-2. Enter X-ray energy in keV.
-3. Set the 2theta range.
-4. Choose the output `.xlsx` path.
-5. Click `Export Excel`.
+1. Drag `.cif` files or a CIF folder into the window, or click `Add files` / `Add folder`.
+2. Choose an X-ray preset (`Cu Kα`, `30 keV`, `83 keV`) or enter a manual energy in keV.
+3. Confirm the 2theta range and output `.xlsx` path.
+4. Click `Export Excel`.
+
+Manual energy has priority over the selected preset. Leave the manual energy
+field blank to use the preset.
 
 ## CLI Examples
 
@@ -136,14 +139,16 @@ start_xrd_atlas.bat
 首次运行时，脚本会自动检查 Python、修正 Tk/Tcl 路径，并尝试安装所需依赖。
 打开 GUI 后，普通用户只需要：
 
-1. 点击 `添加文件` 或 `添加文件夹`。
-2. 确认自动生成的 Excel 保存位置。
-3. 点击 `导出 Excel`。
+1. 把 `.cif` 文件或包含 CIF 的文件夹直接拖入窗口，或点击 `添加文件` / `添加文件夹`。
+2. 选择 X 射线预设（`Cu Kα`、`30 keV`、`83 keV`），必要时填写手动能量 keV。
+3. 确认自动生成的 Excel 保存位置和 2θ 范围。
+4. 点击 `导出 Excel`。
 
-默认参数为 Cu Kα、2θ 0-180°。多数常规 CIF 峰表导出不需要修改高级参数。
+默认参数为 Cu Kα、2θ 0-180°。手动能量非空时优先生效；留空则使用所选预设。
 
 也可以把一个或多个 `.cif` 文件，或包含 CIF 的文件夹，直接拖到
 `start_xrd_atlas.bat` 上。GUI 会自动载入这些 CIF，并自动建议 Excel 保存位置。
+打开 GUI 后，也可以继续把 CIF 文件或文件夹拖入窗口追加加载；程序会自动去重并忽略非 CIF 文件。
 
 如果只想直接得到 Excel，不需要打开 GUI，可以把 `.cif` 文件或 CIF 文件夹拖到：
 

@@ -66,6 +66,21 @@ BEGINNER_PEAK_HEADERS = [
     "提示",
 ]
 
+HEADER_STYLE_ID = 1
+KEY_HEADER_STYLE_ID = 2
+PHASE_STYLE_FIRST_ID = 3
+BEGINNER_KEY_COLUMN_INDEXES = {1, 5, 6, 7, 8, 9, 11}
+PHASE_FILL_COLORS = [
+    "FFF2CC",
+    "DDEBF7",
+    "E2F0D9",
+    "FCE4D6",
+    "EADCF8",
+    "D9EAD3",
+    "F4CCCC",
+    "D9E2F3",
+]
+
 
 def _to_jsonable(value: Any) -> Any:
     if isinstance(value, Path):
@@ -189,12 +204,25 @@ def _user_guide_rows(payload: XrdAtlasExportPayload) -> list[list[Any]]:
         ["默认参数", f"{payload.settings.source_preset}，2θ {payload.settings.two_theta_min_deg:g}-{payload.settings.two_theta_max_deg:g}°"],
         ["最快使用", "普通用户先看 推荐峰表；需要英文列名或完整字段时再看 Combined Peaks。"],
         ["注意", "这是理论峰表，不是实验谱拟合、物相检索数据库或 Rietveld 精修。"],
+        ["颜色说明", "推荐峰表 和 Combined Peaks 中，同一相使用相同淡色底纹；不同相用不同颜色，便于筛选、复制和与实验峰对齐。"],
         [],
         ["工作表", "内容"],
         ["Summary", "导出参数、每个 CIF 的读取状态、错误和警告。"],
         ["推荐峰表", "中文列名的常用峰表，适合直接查看、筛选和复制到 Origin。"],
         ["Combined Peaks", "英文列名的完整合并峰表，适合程序读取或后续批处理。"],
         ["各相工作表", "单个 CIF/相的峰表，名称来自 CIF 文件名。"],
+        [],
+        ["新手先看哪几列", "用途"],
+        ["相名 / phase_name", "判断这一行峰属于哪个 CIF/相；合并表中可按这一列筛选。"],
+        ["晶面 hkl / hkl", "该峰对应的晶面指数，用于标注和对比不同相的特征峰。"],
+        ["d 间距 / d_A", "晶面间距，单位 Å；跨不同 X 射线波长或不同仪器设置比较时优先看这一列。"],
+        ["2θ 当前设置 / two_theta_current_deg", "按当前导出参数计算的 2θ 峰位，和实验谱横坐标对齐时优先看这一列。"],
+        ["2θ Cu Kα / two_theta_cu_ka_deg", "固定换算到 Cu Kα 条件下的 2θ，便于和常见实验数据或文献表格快速比较。"],
+        ["相对强度 / relative_intensity", "理论归一化强度，最强峰为 100；可辅助找强峰，但不是实验定量强度。"],
+        ["提示 / warnings", "CIF 读取或计算提示；非空时先检查 CIF 信息、占位、对称性或计算限制。"],
+        [],
+        ["如何和实验谱对齐", "先确认实验 X 射线波长是否与导出设置一致；一致时主要对比 2θ 当前设置，不一致时先用 d 间距或重新导出对应波长。"],
+        ["常见误区", "不要只凭单个强峰判定物相；应同时比较多个峰位、hkl 和相邻相的重叠峰。相对强度受择优取向、晶粒尺寸、仪器函数等影响较大。"],
         [],
         ["常用列名", "含义"],
         ["phase_name", "相名，默认来自 CIF 文件名。"],
@@ -262,13 +290,57 @@ def _xlsx_column_name(index: int) -> str:
     return name
 
 
-def _xlsx_cell(ref: str, value: Any) -> str:
+def _xlsx_style_attribute(style_id: int | None) -> str:
+    return "" if style_id is None else f' s="{style_id}"'
+
+
+def _xlsx_cell(ref: str, value: Any, style_id: int | None = None) -> str:
+    style = _xlsx_style_attribute(style_id)
     if value is None:
-        return f'<c r="{ref}" t="inlineStr"><is><t></t></is></c>'
+        return f'<c r="{ref}"{style} t="inlineStr"><is><t></t></is></c>'
     if isinstance(value, (int, float, np.integer, np.floating)) and np.isfinite(float(value)):
-        return f'<c r="{ref}"><v>{float(value):.12g}</v></c>'
+        return f'<c r="{ref}"{style}><v>{float(value):.12g}</v></c>'
     text = html.escape(str(value))
-    return f'<c r="{ref}" t="inlineStr"><is><t>{text}</t></is></c>'
+    return f'<c r="{ref}"{style} t="inlineStr"><is><t>{text}</t></is></c>'
+
+
+def _xlsx_styles_xml() -> str:
+    phase_fills = "".join(
+        '<fill><patternFill patternType="solid">'
+        f'<fgColor rgb="FF{color}"/><bgColor indexed="64"/>'
+        "</patternFill></fill>"
+        for color in PHASE_FILL_COLORS
+    )
+    phase_xfs = "".join(
+        f'<xf numFmtId="0" fontId="0" fillId="{index}" borderId="0" xfId="0" applyFill="1"/>'
+        for index in range(4, 4 + len(PHASE_FILL_COLORS))
+    )
+    cell_xfs_count = PHASE_STYLE_FIRST_ID + len(PHASE_FILL_COLORS)
+    return (
+        '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+        '<styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">'
+        '<fonts count="2">'
+        '<font><sz val="11"/><color rgb="FF000000"/><name val="Calibri"/><family val="2"/></font>'
+        '<font><b/><sz val="11"/><color rgb="FFFFFFFF"/><name val="Calibri"/><family val="2"/></font>'
+        "</fonts>"
+        f'<fills count="{4 + len(PHASE_FILL_COLORS)}">'
+        '<fill><patternFill patternType="none"/></fill>'
+        '<fill><patternFill patternType="gray125"/></fill>'
+        '<fill><patternFill patternType="solid"><fgColor rgb="FF44546A"/><bgColor indexed="64"/></patternFill></fill>'
+        '<fill><patternFill patternType="solid"><fgColor rgb="FF548235"/><bgColor indexed="64"/></patternFill></fill>'
+        f"{phase_fills}</fills>"
+        '<borders count="1"><border><left/><right/><top/><bottom/><diagonal/></border></borders>'
+        '<cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>'
+        f'<cellXfs count="{cell_xfs_count}">'
+        '<xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/>'
+        '<xf numFmtId="0" fontId="1" fillId="2" borderId="0" xfId="0" applyFont="1" applyFill="1"/>'
+        '<xf numFmtId="0" fontId="1" fillId="3" borderId="0" xfId="0" applyFont="1" applyFill="1"/>'
+        f"{phase_xfs}</cellXfs>"
+        '<cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles>'
+        '<dxfs count="0"/>'
+        '<tableStyles count="0" defaultTableStyle="TableStyleMedium2" defaultPivotStyle="PivotStyleLight16"/>'
+        "</styleSheet>"
+    )
 
 
 def _table_column_widths(headers: list[Any]) -> list[int]:
@@ -351,12 +423,37 @@ def _table_sheet_postamble(rows: list[list[Any]]) -> str:
     return f'<autoFilter ref="A1:{last_column}{last_row}"/>'
 
 
-def _sheet_xml(rows: list[list[Any]]) -> str:
+def _header_style_id(rows: list[list[Any]], col_index: int) -> int | None:
+    if not _is_table_sheet(rows):
+        return None
+    if rows[0] == BEGINNER_PEAK_HEADERS and col_index in BEGINNER_KEY_COLUMN_INDEXES:
+        return KEY_HEADER_STYLE_ID
+    return HEADER_STYLE_ID
+
+
+def _cell_style_id(
+    rows: list[list[Any]],
+    row_index: int,
+    col_index: int,
+    data_row_style_ids: list[int] | None,
+) -> int | None:
+    if row_index == 1:
+        return _header_style_id(rows, col_index)
+    if data_row_style_ids is None:
+        return None
+    data_index = row_index - 2
+    if 0 <= data_index < len(data_row_style_ids):
+        return data_row_style_ids[data_index]
+    return None
+
+
+def _sheet_xml(rows: list[list[Any]], data_row_style_ids: list[int] | None = None) -> str:
     xml_rows = []
     for row_index, row in enumerate(rows, start=1):
         cells = []
         for col_index, value in enumerate(row, start=1):
-            cells.append(_xlsx_cell(f"{_xlsx_column_name(col_index)}{row_index}", value))
+            style_id = _cell_style_id(rows, row_index, col_index, data_row_style_ids)
+            cells.append(_xlsx_cell(f"{_xlsx_column_name(col_index)}{row_index}", value, style_id))
         xml_rows.append(f'<row r="{row_index}">{"".join(cells)}</row>')
     return (
         '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
@@ -405,22 +502,34 @@ def _beginner_peak_rows_for_sheet(rows: list[dict[str, Any]]) -> list[list[Any]]
     ]
 
 
+def _combined_peak_rows_with_phase_styles(phases: list[XrdPhase]) -> tuple[list[dict[str, Any]], list[int]]:
+    rows: list[dict[str, Any]] = []
+    style_ids: list[int] = []
+    for phase_index, phase in enumerate(phases):
+        phase_rows = combined_peak_rows([phase])
+        rows.extend(phase_rows)
+        style_id = PHASE_STYLE_FIRST_ID + (phase_index % len(PHASE_FILL_COLORS))
+        style_ids.extend([style_id] * len(phase_rows))
+    return rows, style_ids
+
+
 def export_xrd_atlas_workbook(payload: XrdAtlasExportPayload, output_path: str | Path) -> None:
-    sheets: list[tuple[str, list[list[Any]]]] = []
+    sheets: list[tuple[str, list[list[Any]], list[int] | None]] = []
     used: set[str] = set()
-    combined_rows = combined_peak_rows(payload.phases)
-    sheets.append((_safe_sheet_name("Summary", used), _summary_rows(payload)))
-    sheets.append((_safe_sheet_name("Combined Peaks", used), _peak_rows_for_sheet(combined_rows)))
-    sheets.append((_safe_sheet_name("推荐峰表", used), _beginner_peak_rows_for_sheet(combined_rows)))
+    combined_rows, combined_row_style_ids = _combined_peak_rows_with_phase_styles(payload.phases)
+    sheets.append((_safe_sheet_name("Summary", used), _summary_rows(payload), None))
+    sheets.append((_safe_sheet_name("Combined Peaks", used), _peak_rows_for_sheet(combined_rows), combined_row_style_ids))
+    sheets.append((_safe_sheet_name("推荐峰表", used), _beginner_peak_rows_for_sheet(combined_rows), combined_row_style_ids))
     for phase in payload.phases:
-        sheets.append((_safe_sheet_name(phase.phase_name, used), _peak_rows_for_sheet(combined_peak_rows([phase]))))
+        sheets.append((_safe_sheet_name(phase.phase_name, used), _peak_rows_for_sheet(combined_peak_rows([phase])), None))
     if payload.experimental_patterns:
-        sheets.append((_safe_sheet_name("Experimental Data", used), _experimental_rows(payload.experimental_patterns)))
-    sheets.append((_safe_sheet_name("使用说明", used), _user_guide_rows(payload)))
+        sheets.append((_safe_sheet_name("Experimental Data", used), _experimental_rows(payload.experimental_patterns), None))
+    sheets.append((_safe_sheet_name("使用说明", used), _user_guide_rows(payload), None))
 
     with ZipFile(Path(output_path), "w", ZIP_DEFLATED) as archive:
         content_overrides = [
             '<Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>',
+            '<Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/>',
             '<Override PartName="/docProps/core.xml" ContentType="application/vnd.openxmlformats-package.core-properties+xml"/>',
             '<Override PartName="/docProps/app.xml" ContentType="application/vnd.openxmlformats-officedocument.extended-properties+xml"/>',
         ]
@@ -448,12 +557,17 @@ def export_xrd_atlas_workbook(payload: XrdAtlasExportPayload, output_path: str |
         )
         sheet_defs = []
         rel_defs = []
-        for index, (name, rows) in enumerate(sheets, start=1):
+        for index, (name, rows, data_row_style_ids) in enumerate(sheets, start=1):
             sheet_defs.append(f'<sheet name="{html.escape(name)}" sheetId="{index}" r:id="rId{index}"/>')
             rel_defs.append(
                 f'<Relationship Id="rId{index}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet{index}.xml"/>'
             )
-            archive.writestr(f"xl/worksheets/sheet{index}.xml", _sheet_xml(rows))
+            archive.writestr(f"xl/worksheets/sheet{index}.xml", _sheet_xml(rows, data_row_style_ids))
+        style_rel_id = len(sheets) + 1
+        rel_defs.append(
+            f'<Relationship Id="rId{style_rel_id}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/>'
+        )
+        archive.writestr("xl/styles.xml", _xlsx_styles_xml())
         archive.writestr(
             "xl/workbook.xml",
             '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'

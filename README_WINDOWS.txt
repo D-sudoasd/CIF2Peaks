@@ -10,13 +10,15 @@ XRD Atlas Windows 使用说明
 最简单用法：
 
 1. 双击 XRD Atlas.exe
-   打开图形界面。点击“添加文件”或“添加文件夹”，选择 CIF 后点击“导出 Excel”。
+   打开图形界面。可以把 CIF 文件或包含 CIF 的文件夹直接拖入窗口，也可以点击“添加文件”或“添加文件夹”，选择 CIF 后点击“导出 Excel”。
 
 2. 把 CIF 文件或包含 CIF 的文件夹拖到 XRD Atlas.exe
    程序会自动把这些 CIF 载入图形界面，并自动建议 Excel 保存位置。
 
 3. 把 CIF 文件或包含 CIF 的文件夹拖到 XRD Atlas Quick Export.exe
    程序会使用默认 Cu Kα、2θ 0-180°，直接在第一个 CIF 所在文件夹生成 Excel。
+
+GUI 中的 X 射线参数会直接显示在主界面：可选 Cu Kα、30 keV、83 keV，也可以手动填写能量 keV。手动能量非空时优先生效；留空则使用所选预设。
 
 第一次在新电脑上使用：
 

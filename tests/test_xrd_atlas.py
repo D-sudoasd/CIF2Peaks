@@ -188,6 +188,17 @@ def _worksheet_rows(workbook_path: Path, sheet_index: int) -> list[list[str]]:
     return rows
 
 
+def _worksheet_cell_styles(workbook_path: Path, sheet_index: int) -> list[list[str]]:
+    namespace = {"main": "http://schemas.openxmlformats.org/spreadsheetml/2006/main"}
+    with ZipFile(workbook_path) as archive:
+        xml = archive.read(f"xl/worksheets/sheet{sheet_index}.xml")
+    root = ET.fromstring(xml)
+    styles: list[list[str]] = []
+    for row in root.findall(".//main:row", namespace):
+        styles.append([cell.attrib.get("s", "0") for cell in row.findall("main:c", namespace)])
+    return styles
+
+
 def test_project_is_cli_only_without_gui_dependencies() -> None:
     project = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))
     dependencies = "\n".join(project["project"]["dependencies"])
@@ -196,8 +207,10 @@ def test_project_is_cli_only_without_gui_dependencies() -> None:
 
     assert "PySide6" not in dependencies
     assert "matplotlib" not in dependencies
+    assert "tkinterdnd2-universal" in dependencies
     assert "PySide6" not in requirements
     assert "matplotlib" not in requirements
+    assert "tkinterdnd2-universal" in requirements
     assert scripts["xrd-atlas"] == "xrd_atlas.batch:main"
     assert scripts["xrd-atlas-peaks"] == "xrd_atlas.batch:main"
     assert scripts["xrd-atlas-gui"] == "xrd_atlas.gui:main"
@@ -209,6 +222,9 @@ def test_windows_build_includes_gui_and_quick_export_apps() -> None:
 
     assert '--name "XRD Atlas"' in build_script
     assert "--name \"XRD Atlas Quick Export\"" in build_script
+    assert "--additional-hooks-dir scripts\\pyinstaller_hooks" in build_script
+    assert "--hidden-import tkinterdnd2" in build_script
+    assert (ROOT / "scripts" / "pyinstaller_hooks" / "hook-tkinterdnd2.py").exists()
     assert "scripts\\xrd_atlas_windows.py" in build_script
     assert "scripts\\xrd_atlas_quick_export_windows.py" in build_script
 
@@ -611,6 +627,75 @@ def test_xrd_atlas_workbook_includes_beginner_chinese_peak_table(tmp_path: Path)
     assert "中文列名" in guide_xml
 
 
+def test_xrd_atlas_workbook_registers_stylesheet_for_export_polish(tmp_path: Path) -> None:
+    service = XrdAtlasService()
+    phases = [service.load_phase(TI_BETA_CIF), service.load_phase(TI_NB_HCP_CIF)]
+    settings = XrdAtlasSettings()
+    service.simulate_phases(phases, settings)
+    output = tmp_path / "styled.xlsx"
+
+    export_xrd_atlas_workbook(XrdAtlasExportPayload(phases, settings), output)
+
+    with ZipFile(output) as archive:
+        content_types = archive.read("[Content_Types].xml").decode("utf-8")
+        workbook_rels = archive.read("xl/_rels/workbook.xml.rels").decode("utf-8")
+        styles_xml = archive.read("xl/styles.xml").decode("utf-8")
+
+    assert 'PartName="/xl/styles.xml"' in content_types
+    assert "spreadsheetml.styles+xml" in content_types
+    assert "relationships/styles" in workbook_rels
+    assert 'Target="styles.xml"' in workbook_rels
+    assert "<cellXfs" in styles_xml
+    assert "FFF2CC" in styles_xml
+
+
+def test_xrd_atlas_combined_peak_sheets_color_rows_by_phase(tmp_path: Path) -> None:
+    service = XrdAtlasService()
+    phases = [service.load_phase(TI_BETA_CIF), service.load_phase(TI_NB_HCP_CIF)]
+    settings = XrdAtlasSettings()
+    service.simulate_phases(phases, settings)
+    output = tmp_path / "phase_colors.xlsx"
+
+    export_xrd_atlas_workbook(XrdAtlasExportPayload(phases, settings), output)
+
+    combined_rows = _worksheet_rows(output, 2)
+    combined_styles = _worksheet_cell_styles(output, 2)
+    beginner_styles = _worksheet_cell_styles(output, 3)
+    first_phase = combined_rows[1][0]
+    second_phase_row = next(index for index, row in enumerate(combined_rows[1:], start=1) if row[0] != first_phase)
+
+    assert combined_styles[0][0] == "1"
+    assert beginner_styles[0][0] == "2"
+    assert beginner_styles[0][2] == "1"
+    assert combined_styles[1][0] != "0"
+    assert combined_styles[1][0] == beginner_styles[1][0]
+    assert all(
+        combined_styles[index][0] == combined_styles[1][0]
+        for index, row in enumerate(combined_rows[1:], start=1)
+        if row[0] == first_phase
+    )
+    assert combined_styles[second_phase_row][0] != combined_styles[1][0]
+
+
+def test_xrd_atlas_user_guide_explains_beginner_columns_and_limits(tmp_path: Path) -> None:
+    service = XrdAtlasService()
+    phases = [service.load_phase(TI_BETA_CIF), service.load_phase(TI_NB_HCP_CIF)]
+    settings = XrdAtlasSettings()
+    service.simulate_phases(phases, settings)
+    output = tmp_path / "guide_detail.xlsx"
+
+    export_xrd_atlas_workbook(XrdAtlasExportPayload(phases, settings), output)
+
+    guide_text = "\n".join("|".join(row) for row in _worksheet_rows(output, 6))
+
+    assert "新手先看哪几列" in guide_text
+    assert "two_theta_current_deg" in guide_text
+    assert "d_A" in guide_text
+    assert "相对强度" in guide_text
+    assert "不是实验定量强度" in guide_text
+    assert "warnings" in guide_text
+
+
 def test_batch_module_help_and_package_main_cli(tmp_path: Path) -> None:
     help_result = subprocess.run(
         [sys.executable, "-m", "xrd_atlas.batch", "--help"],
@@ -699,6 +784,32 @@ def test_beginner_gui_uses_custom_energy_when_provided() -> None:
     assert settings.two_theta_max_deg == 120.0
 
 
+def test_beginner_gui_uses_visible_energy_presets() -> None:
+    from xrd_atlas.constants import X_RAY_ENERGY_WAVELENGTH_KEV_A
+    from xrd_atlas.gui import build_beginner_gui_settings
+
+    low_energy = build_beginner_gui_settings(xray_preset="30 keV")
+    high_energy = build_beginner_gui_settings(xray_preset="83 keV")
+
+    assert low_energy.input_mode == "energy"
+    assert low_energy.energy_keV == 30.0
+    assert np.isclose(low_energy.wavelength_A, X_RAY_ENERGY_WAVELENGTH_KEV_A / 30.0)
+    assert high_energy.input_mode == "energy"
+    assert high_energy.energy_keV == 83.0
+    assert np.isclose(high_energy.wavelength_A, X_RAY_ENERGY_WAVELENGTH_KEV_A / 83.0)
+
+
+def test_beginner_gui_manual_energy_overrides_selected_preset() -> None:
+    from xrd_atlas.constants import X_RAY_ENERGY_WAVELENGTH_KEV_A
+    from xrd_atlas.gui import build_beginner_gui_settings
+
+    settings = build_beginner_gui_settings(energy_keV="20.0", xray_preset="83 keV")
+
+    assert settings.input_mode == "energy"
+    assert settings.energy_keV == 20.0
+    assert np.isclose(settings.wavelength_A, X_RAY_ENERGY_WAVELENGTH_KEV_A / 20.0)
+
+
 def test_beginner_gui_suggests_clear_output_path(tmp_path: Path) -> None:
     from xrd_atlas.gui import suggest_output_path
 
@@ -765,6 +876,41 @@ def test_gui_startup_collects_dragged_cif_files_and_folders(tmp_path: Path) -> N
     paths = initial_gui_cif_paths([cif, notes, nested, uppercase_suffix_cif, cif, tmp_path / "missing.cif"])
 
     assert paths == [cif.resolve(), nested_cif.resolve(), uppercase_suffix_cif.resolve()]
+
+
+def test_gui_splits_drop_event_paths_with_spaces(tmp_path: Path) -> None:
+    from xrd_atlas.gui import split_drop_event_paths
+
+    spaced_cif = tmp_path / "Ti beta.cif"
+    folder = tmp_path / "folder with spaces"
+    drop_data = f"{{{spaced_cif}}} {{{folder}}}"
+
+    paths = split_drop_event_paths(drop_data, lambda value: (str(spaced_cif), str(folder)))
+
+    assert paths == [str(spaced_cif), str(folder)]
+
+
+def test_gui_drop_adds_cifs_and_reports_ignored_inputs(tmp_path: Path) -> None:
+    from xrd_atlas.gui import add_gui_cif_inputs
+
+    cif = tmp_path / "Ti beta.cif"
+    uppercase_cif = tmp_path / "Ti copy.CIF"
+    notes = tmp_path / "notes.txt"
+    folder = tmp_path / "folder"
+    nested_cif = folder / "nested.cif"
+    empty_folder = tmp_path / "empty"
+    for path in (cif, uppercase_cif, notes):
+        path.write_text("data_test\n", encoding="utf-8")
+    folder.mkdir()
+    empty_folder.mkdir()
+    nested_cif.write_text("data_nested\n", encoding="utf-8")
+    selected_paths = [cif.resolve()]
+
+    result = add_gui_cif_inputs(selected_paths, [cif, uppercase_cif, notes, folder, empty_folder, tmp_path / "missing.cif"])
+
+    assert result.added_count == 2
+    assert result.ignored_count == 4
+    assert selected_paths == [cif.resolve(), uppercase_cif.resolve(), nested_cif.resolve()]
 
 
 def test_quick_export_uses_dragged_cifs_and_smart_default_output(tmp_path: Path) -> None:

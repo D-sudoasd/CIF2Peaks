@@ -28,6 +28,21 @@ class SimpleGuiPreviewResult:
     phase_rows: list[tuple[str, str, str, str, str]]
 
 
+@dataclass(frozen=True)
+class GuiCifInputUpdate:
+    added_count: int
+    ignored_count: int
+
+
+GUI_XRAY_PRESET_LABELS = ["Cu Kα", "30 keV", "83 keV"]
+GUI_XRAY_PRESETS = {
+    "Cu Kα": None,
+    "Cu Ka": None,
+    "30 keV": 30.0,
+    "83 keV": 83.0,
+}
+
+
 def _configure_tcl_tk_environment(python_base: str | Path | None = None) -> None:
     base = Path(sys.base_prefix if python_base is None else python_base)
     tcl_dir = base / "tcl" / "tcl8.6"
@@ -74,6 +89,7 @@ def build_beginner_gui_settings(
     two_theta_min: str | float = 0.0,
     two_theta_max: str | float = 180.0,
     energy_keV: str | float | None = None,
+    xray_preset: str = "Cu Kα",
 ) -> XrdAtlasSettings:
     if energy_keV is not None and str(energy_keV).strip():
         return build_gui_settings(energy_keV, two_theta_min, two_theta_max)
@@ -82,6 +98,20 @@ def build_beginner_gui_settings(
     max_deg = _parse_float(two_theta_max, "2theta max")
     if min_deg < 0 or max_deg > 180 or min_deg >= max_deg:
         raise ValueError("2theta range must satisfy 0 <= min < max <= 180.")
+    if xray_preset not in GUI_XRAY_PRESETS:
+        raise ValueError(f"Unknown X-ray preset: {xray_preset}")
+
+    preset_energy = GUI_XRAY_PRESETS[xray_preset]
+    if preset_energy is not None:
+        return XrdAtlasSettings(
+            input_mode="energy",
+            source_preset=xray_preset,
+            energy_keV=preset_energy,
+            wavelength_A=X_RAY_ENERGY_WAVELENGTH_KEV_A / preset_energy,
+            two_theta_min_deg=min_deg,
+            two_theta_max_deg=max_deg,
+        )
+
     return XrdAtlasSettings(
         input_mode="source",
         source_preset=DEFAULT_XRD_SOURCE,
@@ -97,14 +127,32 @@ def normalize_xlsx_output_path(output_path: str | Path) -> Path:
     return path
 
 
-def initial_gui_cif_paths(inputs: Sequence[str | Path]) -> list[Path]:
-    paths: list[Path] = []
+def split_drop_event_paths(drop_data: str, splitlist: Callable[[str], Sequence[str]]) -> list[str]:
+    text = str(drop_data).strip()
+    if not text:
+        return []
+    try:
+        return [str(item) for item in splitlist(text) if str(item).strip()]
+    except Exception:
+        return [text]
+
+
+def add_gui_cif_inputs(selected_paths: list[Path], inputs: Sequence[str | Path]) -> GuiCifInputUpdate:
+    added_count = 0
+    ignored_count = 0
     seen: set[Path] = set()
+    for path in selected_paths:
+        try:
+            seen.add(Path(path).expanduser().resolve())
+        except OSError:
+            continue
+
     for item in inputs:
         candidate = Path(item).expanduser()
         try:
             resolved = candidate.resolve()
         except OSError:
+            ignored_count += 1
             continue
 
         if resolved.is_dir():
@@ -117,11 +165,24 @@ def initial_gui_cif_paths(inputs: Sequence[str | Path]) -> list[Path]:
         else:
             candidates = []
 
+        if not candidates:
+            ignored_count += 1
+            continue
+
         for path in candidates:
             resolved_path = path.resolve()
-            if resolved_path not in seen:
-                paths.append(resolved_path)
-                seen.add(resolved_path)
+            if resolved_path in seen:
+                ignored_count += 1
+                continue
+            selected_paths.append(resolved_path)
+            seen.add(resolved_path)
+            added_count += 1
+    return GuiCifInputUpdate(added_count=added_count, ignored_count=ignored_count)
+
+
+def initial_gui_cif_paths(inputs: Sequence[str | Path]) -> list[Path]:
+    paths: list[Path] = []
+    add_gui_cif_inputs(paths, inputs)
     return paths
 
 
@@ -146,6 +207,8 @@ def friendly_error_message(exc: Exception) -> str:
         return "参数需要填写数字。也可以直接使用默认设置。"
     if "x-ray energy kev must be greater than 0" in lower:
         return "X 射线能量需要大于 0 keV。也可以留空使用默认 Cu Kα。"
+    if "unknown x-ray preset" in lower:
+        return "X 射线预设不正确。请选择 Cu Kα、30 keV 或 83 keV，或直接填写手动能量。"
     if "2theta range" in lower:
         return "2θ 范围需要满足 0 <= 最小值 < 最大值 <= 180。"
     if isinstance(exc, FileNotFoundError) or "missing cif" in lower:
@@ -190,6 +253,7 @@ def run_simple_gui_export(
     output_path: str | Path,
     *,
     energy_keV: str | float | None = None,
+    xray_preset: str = "Cu Kα",
     two_theta_min: str | float = 0.0,
     two_theta_max: str | float = 180.0,
 ) -> SimpleGuiExportResult:
@@ -200,7 +264,7 @@ def run_simple_gui_export(
     if missing:
         raise FileNotFoundError("Missing CIF file(s): " + "; ".join(missing))
 
-    settings = build_beginner_gui_settings(two_theta_min, two_theta_max, energy_keV)
+    settings = build_beginner_gui_settings(two_theta_min, two_theta_max, energy_keV, xray_preset)
     service = XrdAtlasService()
     phases = service.load_phases(resolved_cifs)
     service.simulate_phases(phases, settings)
@@ -265,12 +329,20 @@ def _launch_tk_app(initial_paths: Sequence[str | Path] = ()) -> None:
     import tkinter as tk
     from tkinter import filedialog, messagebox, ttk
 
-    root = tk.Tk()
+    try:
+        from tkinterdnd2 import DND_FILES, TkinterDnD
+
+        root = TkinterDnD.Tk()
+        dnd_available = True
+    except Exception:
+        DND_FILES = ""
+        root = tk.Tk()
+        dnd_available = False
     if os.environ.get("XRD_ATLAS_SMOKE_TEST") == "1":
         root.after(300, root.destroy)
     root.title("XRD Atlas - CIF 转 Excel")
-    root.geometry("980x680")
-    root.minsize(880, 600)
+    root.geometry("1040x700")
+    root.minsize(900, 620)
 
     style = ttk.Style(root)
     try:
@@ -286,7 +358,7 @@ def _launch_tk_app(initial_paths: Sequence[str | Path] = ()) -> None:
     selected_paths: list[Path] = initial_gui_cif_paths(initial_paths)
     last_output_path: Path | None = None
     preview_generation = 0
-    advanced_visible = tk.BooleanVar(value=False)
+    xray_preset_var = tk.StringVar(value=GUI_XRAY_PRESET_LABELS[0])
     energy_var = tk.StringVar(value="")
     min_var = tk.StringVar(value="0")
     max_var = tk.StringVar(value="180")
@@ -299,7 +371,12 @@ def _launch_tk_app(initial_paths: Sequence[str | Path] = ()) -> None:
     input_summary_var = tk.StringVar(
         value="尚未添加 CIF 文件" if not selected_paths else f"已添加 {len(selected_paths)} 个 CIF 文件"
     )
-    settings_summary_var = tk.StringVar(value="默认设置：Cu Kα，2θ 0-180°")
+    drop_hint_var = tk.StringVar(
+        value="可直接把 CIF 文件或文件夹拖到这里。"
+        if dnd_available
+        else "当前环境未启用窗口拖放；请使用“添加文件”或把 CIF 拖到 EXE 图标上启动。"
+    )
+    settings_summary_var = tk.StringVar(value="X 射线：Cu Kα，2θ 0-180°")
 
     root.columnconfigure(0, weight=1)
     root.rowconfigure(1, weight=1)
@@ -329,18 +406,19 @@ def _launch_tk_app(initial_paths: Sequence[str | Path] = ()) -> None:
     files_panel = ttk.LabelFrame(main, text="1. 添加 CIF 文件", padding=12, style="Step.TLabelframe")
     files_panel.grid(row=0, column=0, rowspan=2, sticky="nsew", padx=(0, 10))
     files_panel.columnconfigure(0, weight=1)
-    files_panel.rowconfigure(2, weight=1)
+    files_panel.rowconfigure(3, weight=1)
 
     file_buttons = ttk.Frame(files_panel)
     file_buttons.grid(row=0, column=0, sticky="ew", pady=(0, 8))
     file_buttons.columnconfigure(3, weight=1)
 
-    ttk.Label(files_panel, textvariable=input_summary_var).grid(row=1, column=0, sticky="w", pady=(0, 8))
+    ttk.Label(files_panel, textvariable=input_summary_var).grid(row=1, column=0, sticky="w")
+    ttk.Label(files_panel, textvariable=drop_hint_var, style="Subtitle.TLabel").grid(row=2, column=0, sticky="w", pady=(2, 8))
 
     listbox = tk.Listbox(files_panel, height=14, selectmode=tk.EXTENDED)
-    listbox.grid(row=2, column=0, sticky="nsew")
+    listbox.grid(row=3, column=0, sticky="nsew")
     scrollbar = ttk.Scrollbar(files_panel, orient="vertical", command=listbox.yview)
-    scrollbar.grid(row=2, column=1, sticky="ns")
+    scrollbar.grid(row=3, column=1, sticky="ns")
     listbox.configure(yscrollcommand=scrollbar.set)
 
     def refresh_list() -> None:
@@ -354,27 +432,26 @@ def _launch_tk_app(initial_paths: Sequence[str | Path] = ()) -> None:
         status_var.set("可以导出：确认保存位置后点击“导出 Excel”。" if selected_paths else "准备就绪：添加 CIF 文件后，直接点击“导出 Excel”。")
         schedule_preview()
 
+    def add_inputs(inputs: Sequence[str | Path], source_label: str) -> GuiCifInputUpdate:
+        update = add_gui_cif_inputs(selected_paths, inputs)
+        refresh_list()
+        if update.added_count:
+            suffix = f"，忽略 {update.ignored_count} 项" if update.ignored_count else ""
+            status_var.set(f"{source_label}：新增 {update.added_count} 个 CIF{suffix}。")
+        elif update.ignored_count:
+            status_var.set(f"{source_label}：没有新增 CIF，已忽略 {update.ignored_count} 项。")
+        return update
+
     def add_files() -> None:
         paths = filedialog.askopenfilenames(title="选择 CIF 文件", filetypes=[("CIF files", "*.cif")])
-        known = {path.resolve() for path in selected_paths}
-        for item in paths:
-            path = Path(item).resolve()
-            if path not in known:
-                selected_paths.append(path)
-                known.add(path)
-        refresh_list()
+        if paths:
+            add_inputs(paths, "添加文件")
 
     def add_folder() -> None:
         folder = filedialog.askdirectory(title="选择包含 CIF 文件的文件夹")
         if not folder:
             return
-        known = {path.resolve() for path in selected_paths}
-        for path in sorted(Path(folder).rglob("*.cif"), key=lambda value: str(value).lower()):
-            resolved = path.resolve()
-            if resolved not in known:
-                selected_paths.append(resolved)
-                known.add(resolved)
-        refresh_list()
+        add_inputs([folder], "添加文件夹")
 
     def clear_files() -> None:
         selected_paths.clear()
@@ -393,7 +470,7 @@ def _launch_tk_app(initial_paths: Sequence[str | Path] = ()) -> None:
     ttk.Button(file_buttons, text="移除选中", command=remove_selected, style="Action.TButton").grid(row=0, column=2, padx=(0, 6))
     ttk.Button(file_buttons, text="清空", command=clear_files, style="Action.TButton").grid(row=0, column=3, sticky="w")
 
-    settings_panel = ttk.LabelFrame(main, text="2. 保存位置和默认参数", padding=12, style="Step.TLabelframe")
+    settings_panel = ttk.LabelFrame(main, text="2. 保存位置和 X 射线参数", padding=12, style="Step.TLabelframe")
     settings_panel.grid(row=0, column=1, sticky="nsew", padx=(10, 0))
     settings_panel.columnconfigure(1, weight=1)
 
@@ -417,34 +494,34 @@ def _launch_tk_app(initial_paths: Sequence[str | Path] = ()) -> None:
 
     ttk.Button(output_frame, text="另存为", command=choose_output, style="Action.TButton").grid(row=0, column=1)
 
-    advanced_frame = ttk.Frame(settings_panel)
-
     def update_settings_summary() -> None:
         energy_text = energy_var.get().strip()
-        source_text = f"自定义能量：{energy_text} keV" if energy_text else "默认设置：Cu Kα"
+        preset_text = xray_preset_var.get()
+        if energy_text:
+            source_text = f"手动能量：{energy_text} keV"
+        else:
+            source_text = f"预设：{preset_text}"
         settings_summary_var.set(f"{source_text}，2θ {min_var.get()}-{max_var.get()}°")
 
-    def toggle_advanced() -> None:
-        if advanced_visible.get():
-            advanced_frame.grid(row=3, column=0, columnspan=2, sticky="ew", pady=(8, 0))
-        else:
-            advanced_frame.grid_remove()
+    ttk.Label(settings_panel, text="X 射线预设").grid(row=2, column=0, sticky="w", pady=4)
+    preset_box = ttk.Combobox(settings_panel, textvariable=xray_preset_var, values=GUI_XRAY_PRESET_LABELS, state="readonly", width=12)
+    preset_box.grid(row=2, column=1, sticky="w", pady=4)
+    ttk.Label(settings_panel, text="手动能量 keV").grid(row=3, column=0, sticky="w", pady=4)
+    ttk.Entry(settings_panel, textvariable=energy_var, width=12).grid(row=3, column=1, sticky="w", pady=4)
 
-    ttk.Checkbutton(settings_panel, text="显示高级参数", variable=advanced_visible, command=toggle_advanced).grid(
-        row=2,
-        column=0,
-        columnspan=2,
-        sticky="w",
-        pady=(8, 0),
-    )
-    advanced_frame.columnconfigure(1, weight=1)
-    ttk.Label(advanced_frame, text="X 射线能量 keV").grid(row=0, column=0, sticky="w", pady=4)
-    ttk.Entry(advanced_frame, textvariable=energy_var, width=10).grid(row=0, column=1, sticky="w", pady=4)
-    ttk.Label(advanced_frame, text="2θ 最小值").grid(row=1, column=0, sticky="w", pady=4)
-    ttk.Entry(advanced_frame, textvariable=min_var, width=10).grid(row=1, column=1, sticky="w", pady=4)
-    ttk.Label(advanced_frame, text="2θ 最大值").grid(row=2, column=0, sticky="w", pady=4)
-    ttk.Entry(advanced_frame, textvariable=max_var, width=10).grid(row=2, column=1, sticky="w", pady=4)
-    ttk.Label(advanced_frame, text="能量留空则使用默认 Cu Kα。").grid(row=3, column=0, columnspan=2, sticky="w", pady=(4, 0))
+    range_frame = ttk.Frame(settings_panel)
+    range_frame.grid(row=4, column=1, sticky="w", pady=4)
+    ttk.Label(settings_panel, text="2θ 范围").grid(row=4, column=0, sticky="w", pady=4)
+    ttk.Entry(range_frame, textvariable=min_var, width=8).grid(row=0, column=0, sticky="w")
+    ttk.Label(range_frame, text=" 到 ").grid(row=0, column=1)
+    ttk.Entry(range_frame, textvariable=max_var, width=8).grid(row=0, column=2, sticky="w")
+    ttk.Label(range_frame, text=" °").grid(row=0, column=3, sticky="w")
+    ttk.Label(
+        settings_panel,
+        text="手动能量非空时优先生效；留空则使用上方预设。",
+        style="Subtitle.TLabel",
+    ).grid(row=5, column=0, columnspan=2, sticky="w", pady=(6, 0))
+    xray_preset_var.trace_add("write", lambda *_: update_settings_summary())
     energy_var.trace_add("write", lambda *_: update_settings_summary())
     min_var.trace_add("write", lambda *_: update_settings_summary())
     max_var.trace_add("write", lambda *_: update_settings_summary())
@@ -528,6 +605,7 @@ def _launch_tk_app(initial_paths: Sequence[str | Path] = ()) -> None:
                     selected_paths,
                     output_var.get(),
                     energy_keV=energy_var.get(),
+                    xray_preset=xray_preset_var.get(),
                     two_theta_min=min_var.get(),
                     two_theta_max=max_var.get(),
                 )
@@ -560,6 +638,24 @@ def _launch_tk_app(initial_paths: Sequence[str | Path] = ()) -> None:
     def open_output_folder() -> None:
         if last_output_path is not None:
             open_export_result(last_output_path)
+
+    def handle_drop(event: object) -> str:
+        data = getattr(event, "data", "")
+        dropped_paths = split_drop_event_paths(str(data), root.tk.splitlist)
+        add_inputs(dropped_paths, "拖入文件")
+        return "break"
+
+    def register_drop_target(widget: object) -> None:
+        if not dnd_available:
+            return
+        try:
+            widget.drop_target_register(DND_FILES)
+            widget.dnd_bind("<<Drop>>", handle_drop)
+        except Exception:
+            drop_hint_var.set("当前窗口拖放不可用；请使用“添加文件”或把 CIF 拖到 EXE 图标上启动。")
+
+    for drop_widget in (root, files_panel, listbox, preview_panel, tree):
+        register_drop_target(drop_widget)
 
     export_button.configure(command=export_now)
     export_button.configure(state=tk.NORMAL if selected_paths else tk.DISABLED)

@@ -67,6 +67,7 @@ echo Building standalone Windows app...
     --clean ^
     --windowed ^
     --name "XRD Atlas" ^
+    --additional-hooks-dir scripts\pyinstaller_hooks ^
     --exclude-module pytest ^
     --exclude-module numpy.tests ^
     --exclude-module scipy.tests ^
@@ -83,6 +84,7 @@ echo Building standalone Windows app...
     --hidden-import gemmi ^
     --hidden-import spglib ^
     --hidden-import tkinter ^
+    --hidden-import tkinterdnd2 ^
     --hidden-import _tkinter ^
     scripts\xrd_atlas_windows.py
 
@@ -100,6 +102,7 @@ echo Building standalone quick export app...
     --clean ^
     --windowed ^
     --name "XRD Atlas Quick Export" ^
+    --additional-hooks-dir scripts\pyinstaller_hooks ^
     --exclude-module pytest ^
     --exclude-module numpy.tests ^
     --exclude-module scipy.tests ^
@@ -116,6 +119,7 @@ echo Building standalone quick export app...
     --hidden-import gemmi ^
     --hidden-import spglib ^
     --hidden-import tkinter ^
+    --hidden-import tkinterdnd2 ^
     --hidden-import _tkinter ^
     scripts\xrd_atlas_quick_export_windows.py
 
