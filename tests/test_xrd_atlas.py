@@ -392,6 +392,58 @@ def test_xrd_atlas_single_cif_peak_table_and_energy_shift() -> None:
     assert np.isclose(high_energy_phase.result.peaks[0].d_spacing_A, phase.result.peaks[0].d_spacing_A)
 
 
+def test_hexagonal_hkl_labels_preserve_four_index_notation(tmp_path: Path) -> None:
+    service = XrdAtlasService()
+    phase = service.load_phase(TI_NB_HCP_CIF)
+    settings = XrdAtlasSettings()
+    service.simulate_phase(phase, settings)
+
+    rows = combined_peak_rows([phase])
+
+    assert rows[0]["hkl"] == "(1 0 -1 0)"
+    assert rows[0]["family_label"] == "{1 0 -1 0}"
+    assert rows[0]["h"] == 1
+    assert rows[0]["k"] == 0
+    assert rows[0]["i"] == -1
+    assert rows[0]["l"] == 0
+    assert "(0 0 0)" not in {row["hkl"] for row in rows}
+    assert "(0 0 0 2)" in {row["hkl"] for row in rows}
+    assert "(1 0 -1 1)" in {row["hkl"] for row in rows}
+
+    csv_output = tmp_path / "hcp_hkl.csv"
+    export_peak_reference_csv(XrdAtlasExportPayload([phase], settings), csv_output)
+
+    with csv_output.open("r", encoding="utf-8-sig", newline="") as handle:
+        csv_rows = list(csv.DictReader(handle))
+    assert csv_rows[0]["hkl"] == "(1 0 -1 0)"
+
+    workbook_output = tmp_path / "hcp_hkl.xlsx"
+    export_xrd_atlas_workbook(XrdAtlasExportPayload([phase], settings), workbook_output)
+
+    combined_sheet = _worksheet_rows(workbook_output, 2)
+    headers = combined_sheet[0]
+    assert "i" in headers
+    assert combined_sheet[1][headers.index("hkl")] == "(1 0 -1 0)"
+    assert combined_sheet[1][headers.index("i")] == "-1"
+    assert combined_sheet[1][headers.index("l")] == "0"
+
+
+def test_cubic_hkl_labels_remain_three_index_notation() -> None:
+    service = XrdAtlasService()
+    phase = service.load_phase(TI_BETA_CIF)
+    service.simulate_phase(phase, XrdAtlasSettings())
+
+    rows = combined_peak_rows([phase])
+    first = rows[0]
+
+    assert first["hkl"] == "(1 1 0)"
+    assert first["family_label"] == "{1 1 0}"
+    assert first["h"] == 1
+    assert first["k"] == 1
+    assert first["i"] is None
+    assert first["l"] == 0
+
+
 def test_xrd_atlas_loads_occupancy_conflict_cif_with_warning(tmp_path: Path) -> None:
     cif_path = _write_ni_occupancy_cif(tmp_path / "Ni.cif")
     service = XrdAtlasService()
@@ -567,7 +619,7 @@ def test_xrd_atlas_workbook_peak_sheets_are_excel_friendly(tmp_path: Path) -> No
         combined = archive.read("xl/worksheets/sheet2.xml").decode("utf-8")
 
     assert '<pane ySplit="1" topLeftCell="A2"' in combined
-    assert '<autoFilter ref="A1:R' in combined
+    assert '<autoFilter ref="A1:S' in combined
     assert '<cols>' in combined
     assert 'width="24"' in combined
 

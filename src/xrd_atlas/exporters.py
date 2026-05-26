@@ -11,6 +11,7 @@ from zipfile import ZIP_DEFLATED, ZipFile
 
 import numpy as np
 
+from .hkl import format_hkl
 from .models import ExperimentalPattern, XrdAtlasExportPayload, XrdAtlasPeakRow, XrdPhase
 from .service import phase_peak_rows
 from .utils import friendly_cif_issue_message, now_iso, package_versions
@@ -30,6 +31,7 @@ PEAK_HEADERS = [
     "family_label",
     "h",
     "k",
+    "i",
     "l",
     "g_1_over_A",
     "q_1_over_A",
@@ -100,6 +102,12 @@ def _row_to_dict(row: XrdAtlasPeakRow) -> dict[str, Any]:
     return asdict(row)
 
 
+def _format_peak_row_hkl(row: XrdAtlasPeakRow) -> str:
+    if row.i is None:
+        return format_hkl((row.h, row.k, row.l))
+    return format_hkl((row.h, row.k, row.i, row.l))
+
+
 def combined_peak_rows(phases: list[XrdPhase]) -> list[dict[str, Any]]:
     rows: list[dict[str, Any]] = []
     for phase in phases:
@@ -111,7 +119,7 @@ def combined_peak_rows(phases: list[XrdPhase]) -> list[dict[str, Any]]:
                 {
                     "formula": "" if crystal is None else crystal.formula,
                     "space_group": phase.display_space_group,
-                    "hkl": f"({row.h} {row.k} {row.l})",
+                    "hkl": _format_peak_row_hkl(row),
                     "warnings": warnings_text,
                 }
             )
@@ -131,7 +139,7 @@ def peak_reference_rows(phases: list[XrdPhase]) -> list[dict[str, Any]]:
                     "cif_name": phase.cif_path.name,
                     "formula": "" if crystal is None else crystal.formula,
                     "space_group": phase.display_space_group,
-                    "hkl": f"({row.h} {row.k} {row.l})",
+                    "hkl": _format_peak_row_hkl(row),
                     "family_label": row.family_label,
                     "d_A": row.d_A,
                     "two_theta_deg": row.two_theta_current_deg,
@@ -215,6 +223,7 @@ def _user_guide_rows(payload: XrdAtlasExportPayload) -> list[list[Any]]:
         ["新手先看哪几列", "用途"],
         ["相名 / phase_name", "判断这一行峰属于哪个 CIF/相；合并表中可按这一列筛选。"],
         ["晶面 hkl / hkl", "该峰对应的晶面指数，用于标注和对比不同相的特征峰。"],
+        ["六方/三方 hkl 说明", "六方或三方结构可能采用四指数 Miller-Bravais 标记 (h k i l)，例如 (1 0 -1 0)；其他晶系通常为三指数 (h k l)。"],
         ["d 间距 / d_A", "晶面间距，单位 Å；跨不同 X 射线波长或不同仪器设置比较时优先看这一列。"],
         ["2θ 当前设置 / two_theta_current_deg", "按当前导出参数计算的 2θ 峰位，和实验谱横坐标对齐时优先看这一列。"],
         ["2θ Cu Kα / two_theta_cu_ka_deg", "固定换算到 Cu Kα 条件下的 2θ，便于和常见实验数据或文献表格快速比较。"],
@@ -358,6 +367,7 @@ def _table_column_widths(headers: list[Any]) -> list[int]:
         "multiplicity": 14,
         "warnings": 42,
         "family_label": 18,
+        "i": 10,
         "g_1_over_A": 14,
         "q_1_over_A": 14,
         "theta_deg": 12,

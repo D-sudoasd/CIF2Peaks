@@ -6,6 +6,7 @@ from pathlib import Path
 import numpy as np
 
 from .constants import DEFAULT_XRD_WAVELENGTH_A, X_RAY_ENERGY_WAVELENGTH_KEV_A
+from .hkl import split_hkl_components
 from .models import XRDPeakRecord, XRDRequest, XrdAtlasPeakRow, XrdAtlasSettings, XrdPhase
 from .structure import load_crystal_model
 from .xrd import XRDService
@@ -94,12 +95,14 @@ def two_theta_for_wavelength(d_spacing_A: float, wavelength_A: float) -> float |
 
 
 def peak_to_atlas_row(phase: XrdPhase, peak: XRDPeakRecord) -> XrdAtlasPeakRow:
+    h, k, i, l = split_hkl_components(peak.hkl)
     return XrdAtlasPeakRow(
         phase_name=phase.phase_name,
         cif_name=phase.cif_path.name,
-        h=peak.hkl[0],
-        k=peak.hkl[1],
-        l=peak.hkl[2],
+        h=h,
+        k=k,
+        i=i,
+        l=l,
         family_label=peak.family_label,
         d_A=peak.d_spacing_A,
         g_1_over_A=peak.g_invA,

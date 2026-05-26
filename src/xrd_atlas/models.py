@@ -69,7 +69,7 @@ class XRDRequest:
 
 @dataclass(frozen=True)
 class XRDPeakRecord:
-    hkl: tuple[int, int, int]
+    hkl: tuple[int, ...]
     d_spacing_A: float
     theta_deg: float
     two_theta_deg: float
@@ -162,6 +162,7 @@ class XrdAtlasPeakRow:
     cif_name: str
     h: int
     k: int
+    i: int | None
     l: int
     family_label: str
     d_A: float

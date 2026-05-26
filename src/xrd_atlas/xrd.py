@@ -6,6 +6,7 @@ import numpy as np
 from pymatgen.analysis.diffraction.xrd import XRDCalculator
 
 from .constants import XRD_SOURCE_PRESETS, X_RAY_ENERGY_WAVELENGTH_KEV_A
+from .hkl import format_hkl, normalize_hkl
 from .models import CrystalModel, XRDPeakRecord, XRDRequest, XRDResult
 from .utils import now_iso, package_versions
 
@@ -117,10 +118,10 @@ class XRDService:
             if not families:
                 continue
             representative = max(families, key=lambda item: int(item.get("multiplicity", 1)))
-            hkl = tuple(int(value) for value in representative["hkl"])
+            hkl = normalize_hkl(representative["hkl"])
             multiplicity = sum(int(item.get("multiplicity", 1)) for item in families)
-            label = " / ".join(f"({item['hkl'][0]} {item['hkl'][1]} {item['hkl'][2]})" for item in families[:3])
-            family_label = "{" + " / ".join(f"{item['hkl'][0]} {item['hkl'][1]} {item['hkl'][2]}" for item in families[:6]) + "}"
+            label = " / ".join(format_hkl(item["hkl"]) for item in families[:3])
+            family_label = "{" + " / ".join(format_hkl(item["hkl"])[1:-1] for item in families[:6]) + "}"
             theta = float(two_theta) / 2.0
             g_invA = 0.0 if float(d_spacing) == 0 else 1.0 / float(d_spacing)
             q_invA = 4.0 * np.pi * np.sin(np.deg2rad(theta)) / wavelength
