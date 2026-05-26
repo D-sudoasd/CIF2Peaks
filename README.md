@@ -48,7 +48,7 @@ Basic workflow:
 
 1. Drag `.cif` files or a CIF folder into the window, or click `Add files` / `Add folder`.
 2. Choose an X-ray preset (`Cu Kα`, `30 keV`, `83 keV`) or enter a manual energy in keV.
-3. Confirm the 2theta range and output `.xlsx` path.
+3. Confirm the d range in Angstrom and output `.xlsx` path. Leave either d boundary blank to keep it unrestricted.
 4. Click `Export Excel`.
 
 Manual energy has priority over the selected preset. Leave the manual energy
@@ -141,10 +141,10 @@ start_xrd_atlas.bat
 
 1. 把 `.cif` 文件或包含 CIF 的文件夹直接拖入窗口，或点击 `添加文件` / `添加文件夹`。
 2. 选择 X 射线预设（`Cu Kα`、`30 keV`、`83 keV`），必要时填写手动能量 keV。
-3. 确认自动生成的 Excel 保存位置和 2θ 范围。
+3. 确认自动生成的 Excel 保存位置和 d 范围（Å）；任一边界留空表示不限制。
 4. 点击 `导出 Excel`。
 
-默认参数为 Cu Kα、2θ 0-180°。手动能量非空时优先生效；留空则使用所选预设。
+默认参数为 Cu Kα、d 范围不限制。手动能量非空时优先生效；留空则使用所选预设。
 
 也可以把一个或多个 `.cif` 文件，或包含 CIF 的文件夹，直接拖到
 `start_xrd_atlas.bat` 上。GUI 会自动载入这些 CIF，并自动建议 Excel 保存位置。

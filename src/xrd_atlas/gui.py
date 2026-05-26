@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import math
 import os
 from pathlib import Path
 import sys
@@ -64,6 +65,62 @@ def _parse_float(value: str | float | int, field_name: str) -> float:
     return number
 
 
+def _parse_optional_positive_float(value: str | float | int | None, field_name: str) -> float | None:
+    if value is None or not str(value).strip():
+        return None
+    number = _parse_float(value, field_name)
+    if number <= 0:
+        raise ValueError(f"{field_name} must be greater than 0.")
+    return number
+
+
+def _two_theta_deg_for_d_spacing(d_spacing_A: float, wavelength_A: float) -> float | None:
+    argument = wavelength_A / (2.0 * d_spacing_A)
+    if argument > 1.0:
+        if math.isclose(argument, 1.0, rel_tol=0.0, abs_tol=1e-12):
+            argument = 1.0
+        else:
+            return None
+    return math.degrees(2.0 * math.asin(argument))
+
+
+def _apply_d_range_to_settings(
+    settings: XrdAtlasSettings,
+    d_min_A: str | float | int | None,
+    d_max_A: str | float | int | None,
+) -> XrdAtlasSettings:
+    min_A = _parse_optional_positive_float(d_min_A, "d min")
+    max_A = _parse_optional_positive_float(d_max_A, "d max")
+    if min_A is not None and max_A is not None and min_A >= max_A:
+        raise ValueError("d range must satisfy d_min < d_max.")
+
+    half_wavelength = settings.wavelength_A / 2.0
+    if max_A is not None and max_A < half_wavelength:
+        raise ValueError("d range has no observable first-order Bragg peaks for this wavelength.")
+
+    two_theta_min = 0.0
+    if max_A is not None:
+        converted_min = _two_theta_deg_for_d_spacing(max_A, settings.wavelength_A)
+        if converted_min is None:
+            raise ValueError("d range has no observable first-order Bragg peaks for this wavelength.")
+        two_theta_min = converted_min
+
+    if min_A is None or min_A < half_wavelength:
+        two_theta_max = 180.0
+    else:
+        converted_max = _two_theta_deg_for_d_spacing(min_A, settings.wavelength_A)
+        two_theta_max = 180.0 if converted_max is None else converted_max
+
+    if two_theta_min >= two_theta_max:
+        raise ValueError("d range has no observable first-order Bragg peaks for this wavelength.")
+
+    settings.d_min_A = min_A
+    settings.d_max_A = max_A
+    settings.two_theta_min_deg = two_theta_min
+    settings.two_theta_max_deg = two_theta_max
+    return settings
+
+
 def build_gui_settings(
     energy_keV: str | float,
     two_theta_min: str | float = 0.0,
@@ -118,6 +175,16 @@ def build_beginner_gui_settings(
         two_theta_min_deg=min_deg,
         two_theta_max_deg=max_deg,
     )
+
+
+def build_beginner_gui_settings_from_d_range(
+    d_min_A: str | float | None = None,
+    d_max_A: str | float | None = None,
+    energy_keV: str | float | None = None,
+    xray_preset: str = GUI_XRAY_PRESET_LABELS[0],
+) -> XrdAtlasSettings:
+    settings = build_beginner_gui_settings(0.0, 180.0, energy_keV, xray_preset)
+    return _apply_d_range_to_settings(settings, d_min_A, d_max_A)
 
 
 def normalize_xlsx_output_path(output_path: str | Path) -> Path:
@@ -209,6 +276,8 @@ def friendly_error_message(exc: Exception) -> str:
         return "X 射线能量需要大于 0 keV。也可以留空使用默认 Cu Kα。"
     if "unknown x-ray preset" in lower:
         return "X 射线预设不正确。请选择 Cu Kα、30 keV 或 83 keV，或直接填写手动能量。"
+    if "d range" in lower or "d min" in lower or "d max" in lower:
+        return "d 范围需要填写正数，且 d_min < d_max；留空表示不限制。若提示不可观测，请增大 d_max 或调整 X 射线能量。"
     if "2theta range" in lower:
         return "2θ 范围需要满足 0 <= 最小值 < 最大值 <= 180。"
     if isinstance(exc, FileNotFoundError) or "missing cif" in lower:
@@ -256,6 +325,8 @@ def run_simple_gui_export(
     xray_preset: str = "Cu Kα",
     two_theta_min: str | float = 0.0,
     two_theta_max: str | float = 180.0,
+    d_min_A: str | float | None = None,
+    d_max_A: str | float | None = None,
 ) -> SimpleGuiExportResult:
     resolved_cifs = [Path(path).expanduser().resolve() for path in cif_paths]
     if not resolved_cifs:
@@ -264,7 +335,10 @@ def run_simple_gui_export(
     if missing:
         raise FileNotFoundError("Missing CIF file(s): " + "; ".join(missing))
 
-    settings = build_beginner_gui_settings(two_theta_min, two_theta_max, energy_keV, xray_preset)
+    if d_min_A is not None or d_max_A is not None:
+        settings = build_beginner_gui_settings_from_d_range(d_min_A, d_max_A, energy_keV, xray_preset)
+    else:
+        settings = build_beginner_gui_settings(two_theta_min, two_theta_max, energy_keV, xray_preset)
     service = XrdAtlasService()
     phases = service.load_phases(resolved_cifs)
     service.simulate_phases(phases, settings)
@@ -360,8 +434,8 @@ def _launch_tk_app(initial_paths: Sequence[str | Path] = ()) -> None:
     preview_generation = 0
     xray_preset_var = tk.StringVar(value=GUI_XRAY_PRESET_LABELS[0])
     energy_var = tk.StringVar(value="")
-    min_var = tk.StringVar(value="0")
-    max_var = tk.StringVar(value="180")
+    min_var = tk.StringVar(value="")
+    max_var = tk.StringVar(value="")
     output_var = tk.StringVar(value=str(suggest_output_path(selected_paths)))
     status_var = tk.StringVar(
         value="可以导出：确认保存位置后点击“导出 Excel”。"
@@ -376,7 +450,7 @@ def _launch_tk_app(initial_paths: Sequence[str | Path] = ()) -> None:
         if dnd_available
         else "当前环境未启用窗口拖放；请使用“添加文件”或把 CIF 拖到 EXE 图标上启动。"
     )
-    settings_summary_var = tk.StringVar(value="X 射线：Cu Kα，2θ 0-180°")
+    settings_summary_var = tk.StringVar(value="X 射线：Cu Kα，d: 不限制")
 
     root.columnconfigure(0, weight=1)
     root.rowconfigure(1, weight=1)
@@ -497,11 +571,19 @@ def _launch_tk_app(initial_paths: Sequence[str | Path] = ()) -> None:
     def update_settings_summary() -> None:
         energy_text = energy_var.get().strip()
         preset_text = xray_preset_var.get()
+        d_min_text = min_var.get().strip()
+        d_max_text = max_var.get().strip()
         if energy_text:
             source_text = f"手动能量：{energy_text} keV"
         else:
             source_text = f"预设：{preset_text}"
-        settings_summary_var.set(f"{source_text}，2θ {min_var.get()}-{max_var.get()}°")
+        if d_min_text or d_max_text:
+            lower = d_min_text or "不限制"
+            upper = d_max_text or "不限制"
+            range_text = f"d {lower}-{upper} Å"
+        else:
+            range_text = "d: 不限制"
+        settings_summary_var.set(f"{source_text}，{range_text}")
 
     ttk.Label(settings_panel, text="X 射线预设").grid(row=2, column=0, sticky="w", pady=4)
     preset_box = ttk.Combobox(settings_panel, textvariable=xray_preset_var, values=GUI_XRAY_PRESET_LABELS, state="readonly", width=12)
@@ -511,11 +593,11 @@ def _launch_tk_app(initial_paths: Sequence[str | Path] = ()) -> None:
 
     range_frame = ttk.Frame(settings_panel)
     range_frame.grid(row=4, column=1, sticky="w", pady=4)
-    ttk.Label(settings_panel, text="2θ 范围").grid(row=4, column=0, sticky="w", pady=4)
+    ttk.Label(settings_panel, text="d 范围").grid(row=4, column=0, sticky="w", pady=4)
     ttk.Entry(range_frame, textvariable=min_var, width=8).grid(row=0, column=0, sticky="w")
     ttk.Label(range_frame, text=" 到 ").grid(row=0, column=1)
     ttk.Entry(range_frame, textvariable=max_var, width=8).grid(row=0, column=2, sticky="w")
-    ttk.Label(range_frame, text=" °").grid(row=0, column=3, sticky="w")
+    ttk.Label(range_frame, text=" Å").grid(row=0, column=3, sticky="w")
     ttk.Label(
         settings_panel,
         text="手动能量非空时优先生效；留空则使用上方预设。",
@@ -606,8 +688,8 @@ def _launch_tk_app(initial_paths: Sequence[str | Path] = ()) -> None:
                     output_var.get(),
                     energy_keV=energy_var.get(),
                     xray_preset=xray_preset_var.get(),
-                    two_theta_min=min_var.get(),
-                    two_theta_max=max_var.get(),
+                    d_min_A=min_var.get(),
+                    d_max_A=max_var.get(),
                 )
             except Exception as exc:
                 root.after(

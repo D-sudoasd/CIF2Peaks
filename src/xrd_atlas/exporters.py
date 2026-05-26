@@ -169,6 +169,8 @@ def _summary_rows(payload: XrdAtlasExportPayload) -> list[list[Any]]:
         ["source_preset", payload.settings.source_preset],
         ["energy_keV", payload.settings.energy_keV],
         ["wavelength_A", payload.settings.wavelength_A],
+        ["d_min_A", payload.settings.d_min_A],
+        ["d_max_A", payload.settings.d_max_A],
         ["two_theta_min_deg", payload.settings.two_theta_min_deg],
         ["two_theta_max_deg", payload.settings.two_theta_max_deg],
         ["step_deg", payload.settings.step_deg],
@@ -209,7 +211,15 @@ def _user_guide_rows(payload: XrdAtlasExportPayload) -> list[list[Any]]:
     return [
         ["XRD Atlas 使用说明", ""],
         ["这是什么", "从 CIF 晶体结构计算理论粉末 XRD 峰表，便于在 Excel、Origin 或 Python 中继续分析。"],
-        ["默认参数", f"{payload.settings.source_preset}，2θ {payload.settings.two_theta_min_deg:g}-{payload.settings.two_theta_max_deg:g}°"],
+        [
+            "默认参数",
+            (
+                f"{payload.settings.source_preset}，d "
+                f"{payload.settings.d_min_A:g}-{payload.settings.d_max_A:g} Å"
+                if payload.settings.d_min_A is not None and payload.settings.d_max_A is not None
+                else f"{payload.settings.source_preset}，2θ {payload.settings.two_theta_min_deg:g}-{payload.settings.two_theta_max_deg:g}°"
+            ),
+        ],
         ["最快使用", "普通用户先看 推荐峰表；需要英文列名或完整字段时再看 Combined Peaks。"],
         ["注意", "这是理论峰表，不是实验谱拟合、物相检索数据库或 Rietveld 精修。"],
         ["颜色说明", "推荐峰表 和 Combined Peaks 中，同一相使用相同淡色底纹；不同相用不同颜色，便于筛选、复制和与实验峰对齐。"],

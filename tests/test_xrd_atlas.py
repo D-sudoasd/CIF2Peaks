@@ -816,6 +816,75 @@ def test_beginner_gui_defaults_to_cu_ka_without_user_parameters() -> None:
     assert settings.two_theta_max_deg == 180.0
 
 
+def test_beginner_gui_d_range_defaults_to_unrestricted_cu_ka() -> None:
+    from xrd_atlas.gui import build_beginner_gui_settings_from_d_range
+
+    settings = build_beginner_gui_settings_from_d_range()
+
+    assert settings.input_mode == "source"
+    assert settings.source_preset == "Cu Ka"
+    assert settings.d_min_A is None
+    assert settings.d_max_A is None
+    assert settings.two_theta_min_deg == 0.0
+    assert settings.two_theta_max_deg == 180.0
+
+
+def test_beginner_gui_d_range_converts_boundaries_for_cu_ka() -> None:
+    from xrd_atlas.constants import DEFAULT_XRD_WAVELENGTH_A
+    from xrd_atlas.gui import build_beginner_gui_settings_from_d_range
+
+    lower_bound = build_beginner_gui_settings_from_d_range(d_min_A=str(DEFAULT_XRD_WAVELENGTH_A))
+    upper_bound = build_beginner_gui_settings_from_d_range(d_max_A=str(DEFAULT_XRD_WAVELENGTH_A))
+    bounded = build_beginner_gui_settings_from_d_range(d_min_A="1.0", d_max_A="2.0")
+
+    assert np.isclose(lower_bound.two_theta_min_deg, 0.0)
+    assert np.isclose(lower_bound.two_theta_max_deg, 60.0)
+    assert np.isclose(upper_bound.two_theta_min_deg, 60.0)
+    assert np.isclose(upper_bound.two_theta_max_deg, 180.0)
+    assert np.isclose(bounded.two_theta_min_deg, 45.3061, atol=1e-4)
+    assert np.isclose(bounded.two_theta_max_deg, 100.7617, atol=1e-4)
+
+
+def test_beginner_gui_d_range_uses_manual_energy_before_conversion() -> None:
+    from xrd_atlas.constants import X_RAY_ENERGY_WAVELENGTH_KEV_A
+    from xrd_atlas.gui import build_beginner_gui_settings_from_d_range
+
+    settings = build_beginner_gui_settings_from_d_range(d_min_A="1.0", energy_keV="20.0", xray_preset="83 keV")
+
+    assert settings.input_mode == "energy"
+    assert settings.energy_keV == 20.0
+    assert np.isclose(settings.wavelength_A, X_RAY_ENERGY_WAVELENGTH_KEV_A / 20.0)
+    assert np.isclose(settings.two_theta_max_deg, 36.1137, atol=1e-4)
+
+
+def test_beginner_gui_d_range_uses_visible_energy_presets_before_conversion() -> None:
+    from xrd_atlas.constants import X_RAY_ENERGY_WAVELENGTH_KEV_A
+    from xrd_atlas.gui import build_beginner_gui_settings_from_d_range
+
+    low_energy = build_beginner_gui_settings_from_d_range(d_min_A="1.0", xray_preset="30 keV")
+    high_energy = build_beginner_gui_settings_from_d_range(d_min_A="1.0", xray_preset="83 keV")
+
+    assert np.isclose(low_energy.wavelength_A, X_RAY_ENERGY_WAVELENGTH_KEV_A / 30.0)
+    assert np.isclose(high_energy.wavelength_A, X_RAY_ENERGY_WAVELENGTH_KEV_A / 83.0)
+    assert low_energy.two_theta_max_deg > high_energy.two_theta_max_deg
+
+
+@pytest.mark.parametrize(
+    ("d_min_A", "d_max_A", "expected_error"),
+    [
+        ("bad", "", "must be a number"),
+        ("-1", "", "must be greater than 0"),
+        ("2.0", "1.0", "d range"),
+        ("", "0.1", "no observable"),
+    ],
+)
+def test_beginner_gui_d_range_rejects_invalid_inputs(d_min_A: str, d_max_A: str, expected_error: str) -> None:
+    from xrd_atlas.gui import build_beginner_gui_settings_from_d_range
+
+    with pytest.raises(ValueError, match=expected_error):
+        build_beginner_gui_settings_from_d_range(d_min_A=d_min_A, d_max_A=d_max_A)
+
+
 def test_beginner_gui_keeps_cu_ka_when_energy_is_blank() -> None:
     from xrd_atlas.gui import build_beginner_gui_settings
 
@@ -878,6 +947,7 @@ def test_beginner_gui_turns_common_errors_into_chinese_guidance() -> None:
     assert "请先添加" in friendly_error_message(ValueError("Select at least one CIF file."))
     assert "数字" in friendly_error_message(ValueError("2theta min must be a number."))
     assert "能量" in friendly_error_message(ValueError("X-ray energy keV must be greater than 0."))
+    assert "d 范围" in friendly_error_message(ValueError("d range has no observable first-order Bragg peaks for this wavelength."))
     assert "被 Excel 打开" in friendly_error_message(PermissionError("locked"))
 
 
@@ -1109,3 +1179,23 @@ def test_simple_gui_export_writes_xlsx_without_json_sidecar(tmp_path: Path) -> N
     assert result.phase_rows[0][1] == "Ti"
     assert result.phase_rows[0][3] == result.total_peaks
     assert result.phase_rows[0][4] == ""
+
+
+def test_simple_gui_export_filters_by_d_range_and_records_summary(tmp_path: Path) -> None:
+    from xrd_atlas.gui import run_simple_gui_export
+
+    output = tmp_path / "d_filtered.xlsx"
+
+    result = run_simple_gui_export([TI_BETA_CIF], output, d_min_A="1.0", d_max_A="2.0")
+
+    assert result.output_path == output
+    assert result.total_peaks > 0
+    combined_rows = _worksheet_rows(output, 2)
+    d_values = [float(row[5]) for row in combined_rows[1:]]
+    assert d_values
+    assert all(1.0 <= value <= 2.0 for value in d_values)
+    summary = {row[0]: row[1] for row in _worksheet_rows(output, 1) if len(row) >= 2}
+    assert summary["d_min_A"] == "1"
+    assert summary["d_max_A"] == "2"
+    assert float(summary["two_theta_min_deg"]) > 0.0
+    assert float(summary["two_theta_max_deg"]) < 180.0

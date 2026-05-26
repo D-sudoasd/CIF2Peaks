@@ -103,6 +103,8 @@ class XrdAtlasSettings:
     energy_keV: float = 8.047786474944927
     two_theta_min_deg: float = 0.0
     two_theta_max_deg: float = 180.0
+    d_min_A: float | None = None
+    d_max_A: float | None = None
     step_deg: float = 0.02
     fwhm_deg: float = 0.15
     profile_model: str = "pseudo_voigt"
