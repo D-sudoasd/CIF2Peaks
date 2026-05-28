@@ -412,7 +412,7 @@ def _launch_tk_app(initial_paths: Sequence[str | Path] = ()) -> None:
         DND_FILES = ""
         root = tk.Tk()
         dnd_available = False
-    if os.environ.get("XRD_ATLAS_SMOKE_TEST") == "1":
+    if os.environ.get("CIF2PEAKS_SMOKE_TEST") == "1":
         root.after(300, root.destroy)
     root.title("CIF2Peaks - CIF 转 Excel")
     root.geometry("1040x700")

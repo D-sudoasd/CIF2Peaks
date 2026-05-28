@@ -46,7 +46,7 @@ if not exist "examples\cif" (
 )
 call :log "Found example CIF files."
 
-set "XRD_ATLAS_SMOKE_TEST=1"
+set "CIF2PEAKS_SMOKE_TEST=1"
 
 call :log "Checking GUI startup..."
 start /wait "" "%CD%\CIF2Peaks.exe" "%CD%\examples\cif"
@@ -137,7 +137,7 @@ call :log ""
 call :log "Self-test passed."
 rmdir /s /q "%TEST_DIR%" >nul 2>nul
 if defined BAD_TEST_DIR rmdir /s /q "%BAD_TEST_DIR%" >nul 2>nul
-set "XRD_ATLAS_SMOKE_TEST="
+set "CIF2PEAKS_SMOKE_TEST="
 pause
 exit /b 0
 
@@ -149,7 +149,7 @@ if defined BAD_TEST_DIR rmdir /s /q "%BAD_TEST_DIR%" >nul 2>nul
 call :log ""
 call :log "Self-test failed. Copy the whole CIF2Peaks folder and try again."
 call :log "Please send cif2peaks_self_test_report.txt when asking for help."
-set "XRD_ATLAS_SMOKE_TEST="
+set "CIF2PEAKS_SMOKE_TEST="
 pause
 exit /b 1
 

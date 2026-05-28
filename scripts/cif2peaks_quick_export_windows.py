@@ -9,7 +9,7 @@ from cif2peaks.quick_export import quick_export_message_lines, quick_export_cif2
 
 def _show_message(title: str, message: str, *, error: bool = False) -> None:
     print(message)
-    if os.environ.get("XRD_ATLAS_SMOKE_TEST") == "1":
+    if os.environ.get("CIF2PEAKS_SMOKE_TEST") == "1":
         return
 
     _configure_tcl_tk_environment()

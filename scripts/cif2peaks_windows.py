@@ -6,7 +6,7 @@ from cif2peaks.gui import main
 
 
 if __name__ == "__main__":
-    if os.environ.get("XRD_ATLAS_SMOKE_TEST") == "1":
+    if os.environ.get("CIF2PEAKS_SMOKE_TEST") == "1":
         import tkinter as tk
 
         original_tk = tk.Tk

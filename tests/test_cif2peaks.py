@@ -335,7 +335,7 @@ def test_windows_quick_export_entry_exports_without_python_gui(tmp_path: Path) -
     result = subprocess.run(
         [sys.executable, str(script), str(cif_path)],
         cwd=ROOT,
-        env={**_subprocess_env(), "XRD_ATLAS_SMOKE_TEST": "1"},
+        env={**_subprocess_env(), "CIF2PEAKS_SMOKE_TEST": "1"},
         text=True,
         capture_output=True,
         timeout=20,
@@ -356,7 +356,7 @@ def test_windows_quick_export_entry_treats_diagnostic_workbook_as_success(tmp_pa
     result = subprocess.run(
         [sys.executable, str(script), str(bad_cif)],
         cwd=ROOT,
-        env={**_subprocess_env(), "XRD_ATLAS_SMOKE_TEST": "1"},
+        env={**_subprocess_env(), "CIF2PEAKS_SMOKE_TEST": "1"},
         text=True,
         capture_output=True,
         timeout=20,
