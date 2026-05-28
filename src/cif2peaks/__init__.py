@@ -1,4 +1,4 @@
-"""XRD Atlas desktop application."""
+"""CIF2Peaks desktop application."""
 
 __all__ = ["__version__"]
 

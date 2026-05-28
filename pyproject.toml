@@ -3,9 +3,9 @@ requires = ["setuptools>=69", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "xrd-atlas"
+name = "cif2peaks"
 version = "0.1.0"
-description = "Standalone XRD simulation and comparison tool for CIF files."
+description = "A lightweight CIF-to-indexed-powder-diffraction peak table generator for materials research."
 readme = "README.md"
 requires-python = ">=3.11"
 license = {file = "LICENSE"}
@@ -49,15 +49,15 @@ windows = [
 ]
 
 [project.scripts]
-xrd-atlas = "xrd_atlas.batch:main"
-xrd-atlas-peaks = "xrd_atlas.batch:main"
-xrd-atlas-gui = "xrd_atlas.gui:main"
-xrd-atlas-quick-export = "xrd_atlas.quick_export:main"
+cif2peaks = "cif2peaks.batch:main"
+cif2peaks-peaks = "cif2peaks.batch:main"
+cif2peaks-gui = "cif2peaks.gui:main"
+cif2peaks-quick-export = "cif2peaks.quick_export:main"
 
 [project.urls]
-Homepage = "https://github.com/D-sudoasd/xrd_atlas"
-Repository = "https://github.com/D-sudoasd/xrd_atlas"
-Issues = "https://github.com/D-sudoasd/xrd_atlas/issues"
+Homepage = "https://github.com/D-sudoasd/CIF2Peaks"
+Repository = "https://github.com/D-sudoasd/CIF2Peaks"
+Issues = "https://github.com/D-sudoasd/CIF2Peaks/issues"
 
 [tool.setuptools]
 package-dir = {"" = "src"}

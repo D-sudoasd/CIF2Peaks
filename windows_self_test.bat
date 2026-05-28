@@ -2,31 +2,31 @@
 setlocal
 cd /d "%~dp0"
 
-set "REPORT_PATH=%CD%\xrd_atlas_self_test_report.txt"
-> "%REPORT_PATH%" echo XRD Atlas Windows self-test report
+set "REPORT_PATH=%CD%\cif2peaks_self_test_report.txt"
+> "%REPORT_PATH%" echo CIF2Peaks Windows self-test report
 >> "%REPORT_PATH%" echo Created: %DATE% %TIME%
->> "%REPORT_PATH%" echo XRD Atlas folder: %CD%
+>> "%REPORT_PATH%" echo CIF2Peaks folder: %CD%
 >> "%REPORT_PATH%" echo Windows version:
 ver >> "%REPORT_PATH%"
 >> "%REPORT_PATH%" echo Processor architecture: %PROCESSOR_ARCHITECTURE%
 >> "%REPORT_PATH%" echo.
 
-call :log "XRD Atlas Windows self-test"
+call :log "CIF2Peaks Windows self-test"
 call :log ""
 call :log "Report saved to: %REPORT_PATH%"
 call :log ""
 
-if not exist "XRD Atlas.exe" (
-    call :log "Missing XRD Atlas.exe"
+if not exist "CIF2Peaks.exe" (
+    call :log "Missing CIF2Peaks.exe"
     goto fail
 )
-call :log "Found XRD Atlas.exe"
+call :log "Found CIF2Peaks.exe"
 
-if not exist "XRD Atlas Quick Export.exe" (
-    call :log "Missing XRD Atlas Quick Export.exe"
+if not exist "CIF2Peaks Quick Export.exe" (
+    call :log "Missing CIF2Peaks Quick Export.exe"
     goto fail
 )
-call :log "Found XRD Atlas Quick Export.exe"
+call :log "Found CIF2Peaks Quick Export.exe"
 
 if not exist "_internal\_tcl_data\init.tcl" (
     call :log "Missing packaged Tcl files."
@@ -49,14 +49,14 @@ call :log "Found example CIF files."
 set "XRD_ATLAS_SMOKE_TEST=1"
 
 call :log "Checking GUI startup..."
-start /wait "" "%CD%\XRD Atlas.exe" "%CD%\examples\cif"
+start /wait "" "%CD%\CIF2Peaks.exe" "%CD%\examples\cif"
 if errorlevel 1 (
     call :log "GUI startup check failed."
     goto fail
 )
 call :log "GUI startup check passed."
 
-set "TEST_DIR=%TEMP%\xrd_atlas_self_test_%RANDOM%_%RANDOM%"
+set "TEST_DIR=%TEMP%\cif2peaks_self_test_%RANDOM%_%RANDOM%"
 set "BAD_TEST_DIR="
 mkdir "%TEST_DIR%" >nul 2>nul
 if errorlevel 1 (
@@ -70,7 +70,7 @@ copy /Y "examples\cif\*.cif" "%TEST_DIR%\" >nul
 >> "%TEST_DIR%\bad.cif" echo _cell_length_a 3
 
 call :log "Checking quick export..."
-start /wait "" "%CD%\XRD Atlas Quick Export.exe" "%TEST_DIR%"
+start /wait "" "%CD%\CIF2Peaks Quick Export.exe" "%TEST_DIR%"
 if errorlevel 1 (
     call :log "Quick export check failed."
     goto fail_cleanup
@@ -100,7 +100,7 @@ if errorlevel 1 (
 )
 call :log "Generated workbook content check passed."
 
-set "BAD_TEST_DIR=%TEMP%\xrd_atlas_bad_cif_test_%RANDOM%_%RANDOM%"
+set "BAD_TEST_DIR=%TEMP%\cif2peaks_bad_cif_test_%RANDOM%_%RANDOM%"
 mkdir "%BAD_TEST_DIR%" >nul 2>nul
 if errorlevel 1 (
     call :log "Could not create invalid-CIF test folder."
@@ -110,7 +110,7 @@ if errorlevel 1 (
 >> "%BAD_TEST_DIR%\bad.cif" echo _cell_length_a 3
 
 call :log "Checking diagnostic workbook for invalid CIF..."
-start /wait "" "%CD%\XRD Atlas Quick Export.exe" "%BAD_TEST_DIR%\bad.cif"
+start /wait "" "%CD%\CIF2Peaks Quick Export.exe" "%BAD_TEST_DIR%\bad.cif"
 if errorlevel 1 (
     call :log "Invalid-CIF diagnostic export failed."
     goto fail_cleanup
@@ -147,8 +147,8 @@ if defined BAD_TEST_DIR rmdir /s /q "%BAD_TEST_DIR%" >nul 2>nul
 
 :fail
 call :log ""
-call :log "Self-test failed. Copy the whole XRD Atlas folder and try again."
-call :log "Please send xrd_atlas_self_test_report.txt when asking for help."
+call :log "Self-test failed. Copy the whole CIF2Peaks folder and try again."
+call :log "Please send cif2peaks_self_test_report.txt when asking for help."
 set "XRD_ATLAS_SMOKE_TEST="
 pause
 exit /b 1

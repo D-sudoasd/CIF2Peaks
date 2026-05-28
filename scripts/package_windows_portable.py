@@ -7,8 +7,8 @@ from zipfile import ZIP_DEFLATED, ZipFile
 
 
 REQUIRED_RELATIVE_PATHS = (
-    "XRD Atlas.exe",
-    "XRD Atlas Quick Export.exe",
+    "CIF2Peaks.exe",
+    "CIF2Peaks Quick Export.exe",
     "README_WINDOWS.txt",
     "windows_self_test.bat",
     "_internal/tcl86t.dll",
@@ -42,9 +42,9 @@ def package_portable_app(app_dir: str | Path, output_zip: str | Path) -> Path:
 
 
 def main(argv: Sequence[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description="Package the XRD Atlas Windows portable folder as a zip file.")
-    parser.add_argument("app_dir", nargs="?", default=Path("dist") / "XRD Atlas")
-    parser.add_argument("output_zip", nargs="?", default=Path("dist") / "XRD_Atlas_Windows_Portable.zip")
+    parser = argparse.ArgumentParser(description="Package the CIF2Peaks Windows portable folder as a zip file.")
+    parser.add_argument("app_dir", nargs="?", default=Path("dist") / "CIF2Peaks")
+    parser.add_argument("output_zip", nargs="?", default=Path("dist") / "CIF2Peaks_Windows_Portable.zip")
     args = parser.parse_args(argv)
 
     try:

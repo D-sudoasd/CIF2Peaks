@@ -1,7 +1,7 @@
-# XRD Atlas
+# CIF2Peaks: a lightweight CIF-to-indexed-powder-diffraction peak table generator for materials research
 
-XRD Atlas is a lightweight GUI and CLI tool for converting CIF crystal
-structures into theoretical powder XRD peak reference tables.
+CIF2Peaks converts CIF crystal structures into indexed theoretical powder XRD
+peak reference tables for materials research.
 
 It is designed for materials researchers who need a practical way to batch
 export phase, hkl, d-spacing, 2theta, q, g, relative intensity, and warnings
@@ -26,7 +26,7 @@ into Excel for follow-up work in Excel, Origin, Python, or lab notebooks.
 Python 3.11 or newer is required.
 
 ```powershell
-cd C:\Users\AORUS\Desktop\xrd_atlas
+cd C:\path\to\CIF2Peaks
 py -3.11 -m pip install -e .[dev]
 ```
 
@@ -35,13 +35,13 @@ py -3.11 -m pip install -e .[dev]
 Start the desktop app:
 
 ```powershell
-xrd-atlas-gui
+cif2peaks-gui
 ```
 
 Or run it from the project folder:
 
 ```powershell
-py -3.11 -m xrd_atlas.gui
+py -3.11 -m cif2peaks.gui
 ```
 
 Basic workflow:
@@ -59,37 +59,37 @@ field blank to use the preset.
 Export all CIF files in a folder:
 
 ```powershell
-xrd-atlas "C:\path\to\cif_folder" -o result.xlsx
+cif2peaks "C:\path\to\cif_folder" -o result.xlsx
 ```
 
 Export several CIF files:
 
 ```powershell
-xrd-atlas phase1.cif phase2.cif phase3.cif -o result.xlsx
+cif2peaks phase1.cif phase2.cif phase3.cif -o result.xlsx
 ```
 
 Use a custom X-ray energy:
 
 ```powershell
-xrd-atlas "C:\path\to\cif_folder" -o result.xlsx --energy-keV 20
+cif2peaks "C:\path\to\cif_folder" -o result.xlsx --energy-keV 20
 ```
 
 Use a custom wavelength:
 
 ```powershell
-xrd-atlas "C:\path\to\cif_folder" -o result.xlsx --wavelength-A 1.5406
+cif2peaks "C:\path\to\cif_folder" -o result.xlsx --wavelength-A 1.5406
 ```
 
 Limit the 2theta range:
 
 ```powershell
-xrd-atlas "C:\path\to\cif_folder" -o result.xlsx --source "Cu Ka" --two-theta-min 20 --two-theta-max 100
+cif2peaks "C:\path\to\cif_folder" -o result.xlsx --source "Cu Ka" --two-theta-min 20 --two-theta-max 100
 ```
 
 Export CSV instead of Excel:
 
 ```powershell
-xrd-atlas "C:\path\to\cif_folder" -o result.csv
+cif2peaks "C:\path\to\cif_folder" -o result.csv
 ```
 
 ## Output Columns
@@ -115,7 +115,7 @@ The peak tables include:
 
 ## Scientific Scope
 
-XRD Atlas exports theoretical powder XRD peak references from CIF structures.
+CIF2Peaks exports theoretical powder XRD peak references from CIF structures.
 
 It is not:
 
@@ -133,7 +133,7 @@ reference, not as a refined experimental quantity.
 推荐把整个项目文件夹放在一个固定位置，然后双击：
 
 ```text
-start_xrd_atlas.bat
+start_cif2peaks.bat
 ```
 
 首次运行时，脚本会自动检查 Python、修正 Tk/Tcl 路径，并尝试安装所需依赖。
@@ -147,13 +147,13 @@ start_xrd_atlas.bat
 默认参数为 Cu Kα、d 范围不限制。手动能量非空时优先生效；留空则使用所选预设。
 
 也可以把一个或多个 `.cif` 文件，或包含 CIF 的文件夹，直接拖到
-`start_xrd_atlas.bat` 上。GUI 会自动载入这些 CIF，并自动建议 Excel 保存位置。
+`start_cif2peaks.bat` 上。GUI 会自动载入这些 CIF，并自动建议 Excel 保存位置。
 打开 GUI 后，也可以继续把 CIF 文件或文件夹拖入窗口追加加载；程序会自动去重并忽略非 CIF 文件。
 
 如果只想直接得到 Excel，不需要打开 GUI，可以把 `.cif` 文件或 CIF 文件夹拖到：
 
 ```text
-quick_export_xrd_atlas.bat
+quick_export_cif2peaks.bat
 ```
 
 它会使用默认 Cu Kα、2θ 0-180°，并把结果保存到第一个 CIF 所在文件夹。
@@ -168,20 +168,20 @@ quick_export_xrd_atlas.bat
 build_windows_app.bat
 ```
 
-打包成功后，优先把 `dist\XRD_Atlas_Windows_Portable.zip` 发给目标电脑。
-目标电脑解压后进入 `XRD Atlas` 文件夹，先双击 `windows_self_test.bat`。
+打包成功后，优先把 `dist\CIF2Peaks_Windows_Portable.zip` 发给目标电脑。
+目标电脑解压后进入 `CIF2Peaks` 文件夹，先双击 `windows_self_test.bat`。
 目标电脑不需要安装 Python。
 
 在目标电脑上：
 
-- 双击 `XRD Atlas.exe` 打开 GUI。
-- 把 CIF 文件或文件夹拖到 `XRD Atlas.exe` 上，会自动载入 GUI。
-- 把 CIF 文件或文件夹拖到 `XRD Atlas Quick Export.exe` 上，会直接导出 Excel。
+- 双击 `CIF2Peaks.exe` 打开 GUI。
+- 把 CIF 文件或文件夹拖到 `CIF2Peaks.exe` 上，会自动载入 GUI。
+- 把 CIF 文件或文件夹拖到 `CIF2Peaks Quick Export.exe` 上，会直接导出 Excel。
 
 ## Tests
 
 ```powershell
-cd C:\Users\AORUS\Desktop\xrd_atlas
+cd C:\path\to\CIF2Peaks
 py -3.11 -m pytest -q
 ```
 

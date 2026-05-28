@@ -13,7 +13,7 @@ from .gui import (
 )
 
 
-def quick_export_xrd_atlas(
+def quick_export_cif2peaks(
     inputs: Sequence[str | Path],
     *,
     output_path: str | Path | None = None,
@@ -36,7 +36,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     try:
-        result = quick_export_xrd_atlas(args.inputs, output_path=args.output)
+        result = quick_export_cif2peaks(args.inputs, output_path=args.output)
     except Exception as exc:
         print(str(exc))
         return 1

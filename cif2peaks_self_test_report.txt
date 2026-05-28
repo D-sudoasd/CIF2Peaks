@@ -1,0 +1,16 @@
+CIF2Peaks Windows self-test report
+Created: 2026/05/24 �L�� 14:49:07.82
+CIF2Peaks folder: C:\Users\AORUS\Desktop\cif2peaks
+Windows version:
+
+Microsoft Windows [�汾 10.0.26200.8457]
+Processor architecture: AMD64
+
+CIF2Peaks Windows self-test
+
+Report saved to: C:\Users\AORUS\Desktop\cif2peaks\cif2peaks_self_test_report.txt
+
+Missing CIF2Peaks.exe
+
+Self-test failed. Copy the whole CIF2Peaks folder and try again.
+Please send cif2peaks_self_test_report.txt when asking for help.

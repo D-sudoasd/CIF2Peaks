@@ -9,9 +9,9 @@ from collections.abc import Callable
 from typing import Sequence
 
 from .constants import DEFAULT_XRD_SOURCE, X_RAY_ENERGY_WAVELENGTH_KEV_A
-from .exporters import export_xrd_atlas_workbook
-from .models import XrdAtlasExportPayload, XrdAtlasSettings
-from .service import XrdAtlasService
+from .exporters import export_cif2peaks_workbook
+from .models import Cif2PeaksExportPayload, Cif2PeaksSettings
+from .service import Cif2PeaksService
 from .utils import friendly_cif_issue_message
 
 
@@ -85,10 +85,10 @@ def _two_theta_deg_for_d_spacing(d_spacing_A: float, wavelength_A: float) -> flo
 
 
 def _apply_d_range_to_settings(
-    settings: XrdAtlasSettings,
+    settings: Cif2PeaksSettings,
     d_min_A: str | float | int | None,
     d_max_A: str | float | int | None,
-) -> XrdAtlasSettings:
+) -> Cif2PeaksSettings:
     min_A = _parse_optional_positive_float(d_min_A, "d min")
     max_A = _parse_optional_positive_float(d_max_A, "d max")
     if min_A is not None and max_A is not None and min_A >= max_A:
@@ -125,7 +125,7 @@ def build_gui_settings(
     energy_keV: str | float,
     two_theta_min: str | float = 0.0,
     two_theta_max: str | float = 180.0,
-) -> XrdAtlasSettings:
+) -> Cif2PeaksSettings:
     energy = _parse_float(energy_keV, "X-ray energy keV")
     min_deg = _parse_float(two_theta_min, "2theta min")
     max_deg = _parse_float(two_theta_max, "2theta max")
@@ -133,7 +133,7 @@ def build_gui_settings(
         raise ValueError("X-ray energy keV must be greater than 0.")
     if min_deg < 0 or max_deg > 180 or min_deg >= max_deg:
         raise ValueError("2theta range must satisfy 0 <= min < max <= 180.")
-    return XrdAtlasSettings(
+    return Cif2PeaksSettings(
         input_mode="energy",
         energy_keV=energy,
         wavelength_A=X_RAY_ENERGY_WAVELENGTH_KEV_A / energy,
@@ -147,7 +147,7 @@ def build_beginner_gui_settings(
     two_theta_max: str | float = 180.0,
     energy_keV: str | float | None = None,
     xray_preset: str = "Cu Kα",
-) -> XrdAtlasSettings:
+) -> Cif2PeaksSettings:
     if energy_keV is not None and str(energy_keV).strip():
         return build_gui_settings(energy_keV, two_theta_min, two_theta_max)
 
@@ -160,7 +160,7 @@ def build_beginner_gui_settings(
 
     preset_energy = GUI_XRAY_PRESETS[xray_preset]
     if preset_energy is not None:
-        return XrdAtlasSettings(
+        return Cif2PeaksSettings(
             input_mode="energy",
             source_preset=xray_preset,
             energy_keV=preset_energy,
@@ -169,7 +169,7 @@ def build_beginner_gui_settings(
             two_theta_max_deg=max_deg,
         )
 
-    return XrdAtlasSettings(
+    return Cif2PeaksSettings(
         input_mode="source",
         source_preset=DEFAULT_XRD_SOURCE,
         two_theta_min_deg=min_deg,
@@ -182,7 +182,7 @@ def build_beginner_gui_settings_from_d_range(
     d_max_A: str | float | None = None,
     energy_keV: str | float | None = None,
     xray_preset: str = GUI_XRAY_PRESET_LABELS[0],
-) -> XrdAtlasSettings:
+) -> Cif2PeaksSettings:
     settings = build_beginner_gui_settings(0.0, 180.0, energy_keV, xray_preset)
     return _apply_d_range_to_settings(settings, d_min_A, d_max_A)
 
@@ -256,11 +256,11 @@ def initial_gui_cif_paths(inputs: Sequence[str | Path]) -> list[Path]:
 def suggest_output_path(cif_paths: Sequence[str | Path]) -> Path:
     paths = [Path(path).expanduser() for path in cif_paths]
     if not paths:
-        return Path.home() / "Desktop" / "XRD峰表.xlsx"
+        return Path.home() / "Desktop" / "CIF2Peaks峰表.xlsx"
     parent = paths[0].parent if paths[0].parent != Path("") else Path.cwd()
     if len(paths) == 1:
-        return parent / f"{paths[0].stem}_XRD峰表.xlsx"
-    return parent / f"XRD峰表_{len(paths)}个CIF.xlsx"
+        return parent / f"{paths[0].stem}_CIF2Peaks峰表.xlsx"
+    return parent / f"CIF2Peaks峰表_{len(paths)}个CIF.xlsx"
 
 
 def friendly_error_message(exc: Exception) -> str:
@@ -287,7 +287,7 @@ def friendly_error_message(exc: Exception) -> str:
 
 def preview_simple_gui_inputs(cif_paths: Sequence[str | Path]) -> SimpleGuiPreviewResult:
     resolved_cifs = initial_gui_cif_paths(cif_paths)
-    service = XrdAtlasService()
+    service = Cif2PeaksService()
     phases = service.load_phases(resolved_cifs)
 
     phase_rows: list[tuple[str, str, str, str, str]] = []
@@ -339,13 +339,13 @@ def run_simple_gui_export(
         settings = build_beginner_gui_settings_from_d_range(d_min_A, d_max_A, energy_keV, xray_preset)
     else:
         settings = build_beginner_gui_settings(two_theta_min, two_theta_max, energy_keV, xray_preset)
-    service = XrdAtlasService()
+    service = Cif2PeaksService()
     phases = service.load_phases(resolved_cifs)
     service.simulate_phases(phases, settings)
 
     output = normalize_xlsx_output_path(output_path)
     output.parent.mkdir(parents=True, exist_ok=True)
-    export_xrd_atlas_workbook(XrdAtlasExportPayload(phases, settings), output)
+    export_cif2peaks_workbook(Cif2PeaksExportPayload(phases, settings), output)
 
     phase_rows: list[tuple[str, str, str, int, str]] = []
     for phase in phases:
@@ -414,7 +414,7 @@ def _launch_tk_app(initial_paths: Sequence[str | Path] = ()) -> None:
         dnd_available = False
     if os.environ.get("XRD_ATLAS_SMOKE_TEST") == "1":
         root.after(300, root.destroy)
-    root.title("XRD Atlas - CIF 转 Excel")
+    root.title("CIF2Peaks - CIF 转 Excel")
     root.geometry("1040x700")
     root.minsize(900, 620)
 
@@ -458,7 +458,7 @@ def _launch_tk_app(initial_paths: Sequence[str | Path] = ()) -> None:
     header = ttk.Frame(root, padding=(18, 16, 18, 8))
     header.grid(row=0, column=0, sticky="ew")
     header.columnconfigure(0, weight=1)
-    ttk.Label(header, text="XRD Atlas 一键导出", style="Title.TLabel").grid(row=0, column=0, sticky="w")
+    ttk.Label(header, text="CIF2Peaks 一键导出", style="Title.TLabel").grid(row=0, column=0, sticky="w")
     ttk.Label(
         header,
         text="把 CIF 晶体结构批量转换为理论粉末 XRD 峰表，结果可直接用 Excel、Origin 或 Python 继续处理。",
@@ -561,7 +561,7 @@ def _launch_tk_app(initial_paths: Sequence[str | Path] = ()) -> None:
             title="保存 Excel 结果",
             defaultextension=".xlsx",
             filetypes=[("Excel workbook", "*.xlsx")],
-            initialfile=Path(output_var.get()).name or "XRD峰表.xlsx",
+            initialfile=Path(output_var.get()).name or "CIF2Peaks峰表.xlsx",
         )
         if path:
             output_var.set(path)
@@ -752,9 +752,9 @@ def main(argv: Sequence[str] | None = None) -> int:
     except Exception as exc:
         if exc.__class__.__name__ == "TclError" and "init.tcl" in str(exc):
             print(
-                "XRD Atlas 无法启动图形界面：当前 Python 的 Tcl/Tk 组件不可用。\n"
-                "请优先双击 start_xrd_atlas.bat；如果仍失败，请修复 Python 安装中的 Tcl/Tk，"
-                "或使用 dist\\XRD Atlas\\XRD Atlas.exe。"
+                "CIF2Peaks 无法启动图形界面：当前 Python 的 Tcl/Tk 组件不可用。\n"
+                "请优先双击 start_cif2peaks.bat；如果仍失败，请修复 Python 安装中的 Tcl/Tk，"
+                "或使用 dist\\CIF2Peaks\\CIF2Peaks.exe。"
             )
             return 1
         raise

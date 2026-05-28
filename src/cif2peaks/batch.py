@@ -5,9 +5,9 @@ from pathlib import Path
 from typing import Sequence
 
 from .constants import DEFAULT_XRD_SOURCE, XRD_SOURCE_PRESETS
-from .exporters import export_peak_reference_csv, export_xrd_atlas_json, export_xrd_atlas_workbook
-from .models import XrdAtlasExportPayload, XrdAtlasSettings
-from .service import XrdAtlasService
+from .exporters import export_peak_reference_csv, export_cif2peaks_json, export_cif2peaks_workbook
+from .models import Cif2PeaksExportPayload, Cif2PeaksSettings
+from .service import Cif2PeaksService
 
 
 def collect_cif_paths(inputs: Sequence[str | Path], *, recursive: bool = True) -> list[Path]:
@@ -32,7 +32,7 @@ def collect_cif_paths(inputs: Sequence[str | Path], *, recursive: bool = True) -
 def batch_export_peak_reference(
     inputs: Sequence[str | Path],
     output_path: str | Path,
-    settings: XrdAtlasSettings | None = None,
+    settings: Cif2PeaksSettings | None = None,
     *,
     recursive: bool = True,
 ) -> list:
@@ -40,34 +40,34 @@ def batch_export_peak_reference(
     if not cif_paths:
         raise FileNotFoundError("未找到 CIF 文件。")
 
-    service = XrdAtlasService()
-    resolved_settings = settings or XrdAtlasSettings()
+    service = Cif2PeaksService()
+    resolved_settings = settings or Cif2PeaksSettings()
     phases = service.load_phases(cif_paths)
     service.simulate_phases(phases, resolved_settings)
-    payload = XrdAtlasExportPayload(phases, resolved_settings)
+    payload = Cif2PeaksExportPayload(phases, resolved_settings)
 
     output = Path(output_path).expanduser().resolve()
     output.parent.mkdir(parents=True, exist_ok=True)
     if output.suffix.lower() == ".xlsx":
-        export_xrd_atlas_workbook(payload, output)
-        export_xrd_atlas_json(payload, output.with_suffix(".json"))
+        export_cif2peaks_workbook(payload, output)
+        export_cif2peaks_json(payload, output.with_suffix(".json"))
     else:
         export_peak_reference_csv(payload, output)
     return phases
 
 
-def _settings_from_args(args: argparse.Namespace) -> XrdAtlasSettings:
+def _settings_from_args(args: argparse.Namespace) -> Cif2PeaksSettings:
     input_mode = "source"
     if args.energy_keV is not None:
         input_mode = "energy"
     elif args.wavelength_A is not None:
         input_mode = "wavelength"
 
-    return XrdAtlasSettings(
+    return Cif2PeaksSettings(
         input_mode=input_mode,  # type: ignore[arg-type]
         source_preset=args.source,
         wavelength_A=args.wavelength_A if args.wavelength_A is not None else XRD_SOURCE_PRESETS[DEFAULT_XRD_SOURCE],
-        energy_keV=args.energy_keV if args.energy_keV is not None else XrdAtlasSettings().energy_keV,
+        energy_keV=args.energy_keV if args.energy_keV is not None else Cif2PeaksSettings().energy_keV,
         two_theta_min_deg=args.two_theta_min,
         two_theta_max_deg=args.two_theta_max,
     )
@@ -78,7 +78,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         description="Batch-export phase/hkl/d/2theta peak reference tables from CIF files.",
     )
     parser.add_argument("inputs", nargs="+", help="CIF files or directories containing CIF files.")
-    parser.add_argument("-o", "--output", default="xrd_peak_reference.xlsx", help="Output .xlsx or .csv path.")
+    parser.add_argument("-o", "--output", default="cif2peaks_peak_reference.xlsx", help="Output .xlsx or .csv path.")
     parser.add_argument("--no-recursive", action="store_true", help="Do not recurse into input directories.")
     parser.add_argument("--source", default=DEFAULT_XRD_SOURCE, choices=sorted(XRD_SOURCE_PRESETS), help="X-ray source preset.")
     parser.add_argument("--energy-keV", type=float, default=None, help="Use a custom X-ray energy in keV.")

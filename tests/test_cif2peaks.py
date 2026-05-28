@@ -13,10 +13,10 @@ from zipfile import ZipFile
 import numpy as np
 import pytest
 
-from xrd_atlas.batch import batch_export_peak_reference
-from xrd_atlas.exporters import combined_peak_rows, export_peak_reference_csv, export_xrd_atlas_workbook
-from xrd_atlas.models import XrdAtlasExportPayload, XrdAtlasSettings
-from xrd_atlas.service import XrdAtlasService
+from cif2peaks.batch import batch_export_peak_reference
+from cif2peaks.exporters import combined_peak_rows, export_peak_reference_csv, export_cif2peaks_workbook
+from cif2peaks.models import Cif2PeaksExportPayload, Cif2PeaksSettings
+from cif2peaks.service import Cif2PeaksService
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -211,22 +211,22 @@ def test_project_is_cli_only_without_gui_dependencies() -> None:
     assert "PySide6" not in requirements
     assert "matplotlib" not in requirements
     assert "tkinterdnd2-universal" in requirements
-    assert scripts["xrd-atlas"] == "xrd_atlas.batch:main"
-    assert scripts["xrd-atlas-peaks"] == "xrd_atlas.batch:main"
-    assert scripts["xrd-atlas-gui"] == "xrd_atlas.gui:main"
-    assert scripts["xrd-atlas-quick-export"] == "xrd_atlas.quick_export:main"
+    assert scripts["cif2peaks"] == "cif2peaks.batch:main"
+    assert scripts["cif2peaks-peaks"] == "cif2peaks.batch:main"
+    assert scripts["cif2peaks-gui"] == "cif2peaks.gui:main"
+    assert scripts["cif2peaks-quick-export"] == "cif2peaks.quick_export:main"
 
 
 def test_windows_build_includes_gui_and_quick_export_apps() -> None:
     build_script = (ROOT / "build_windows_app.bat").read_text(encoding="ascii")
 
-    assert '--name "XRD Atlas"' in build_script
-    assert "--name \"XRD Atlas Quick Export\"" in build_script
+    assert '--name "CIF2Peaks"' in build_script
+    assert "--name \"CIF2Peaks Quick Export\"" in build_script
     assert "--additional-hooks-dir scripts\\pyinstaller_hooks" in build_script
     assert "--hidden-import tkinterdnd2" in build_script
     assert (ROOT / "scripts" / "pyinstaller_hooks" / "hook-tkinterdnd2.py").exists()
-    assert "scripts\\xrd_atlas_windows.py" in build_script
-    assert "scripts\\xrd_atlas_quick_export_windows.py" in build_script
+    assert "scripts\\cif2peaks_windows.py" in build_script
+    assert "scripts\\cif2peaks_quick_export_windows.py" in build_script
 
 
 def test_windows_build_packages_readme_examples_and_self_test() -> None:
@@ -243,9 +243,9 @@ def test_windows_build_packages_readme_examples_and_self_test() -> None:
     assert (ROOT / "windows_self_test.bat").exists()
     assert "_internal\\_tcl_data\\init.tcl" in self_test
     assert "_internal\\_tk_data\\tk.tcl" in self_test
-    assert "xrd_atlas_self_test_report.txt" in self_test
+    assert "cif2peaks_self_test_report.txt" in self_test
     assert "Windows version" in self_test
-    assert "XRD Atlas folder" in self_test
+    assert "CIF2Peaks folder" in self_test
     assert "Report saved to" in self_test
     assert "Checking generated workbook content" in self_test
     assert "Checking diagnostic workbook for invalid CIF" in self_test
@@ -261,20 +261,20 @@ def test_windows_build_creates_portable_zip() -> None:
     build_script = (ROOT / "build_windows_app.bat").read_text(encoding="ascii")
 
     assert "scripts\\package_windows_portable.py" in build_script
-    assert "XRD_Atlas_Windows_Portable.zip" in build_script
+    assert "CIF2Peaks_Windows_Portable.zip" in build_script
 
 
 def test_windows_portable_zip_contains_complete_folder(tmp_path: Path) -> None:
     from scripts.package_windows_portable import package_portable_app
 
-    app_dir = tmp_path / "XRD Atlas"
+    app_dir = tmp_path / "CIF2Peaks"
     internal = app_dir / "_internal"
     examples = app_dir / "examples" / "cif"
     internal.mkdir(parents=True)
     examples.mkdir(parents=True)
     for relative in (
-        "XRD Atlas.exe",
-        "XRD Atlas Quick Export.exe",
+        "CIF2Peaks.exe",
+        "CIF2Peaks Quick Export.exe",
         "README_WINDOWS.txt",
         "windows_self_test.bat",
         "_internal/tcl86t.dll",
@@ -287,28 +287,28 @@ def test_windows_portable_zip_contains_complete_folder(tmp_path: Path) -> None:
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text("x", encoding="utf-8")
 
-    zip_path = package_portable_app(app_dir, tmp_path / "XRD_Atlas_Windows_Portable.zip")
+    zip_path = package_portable_app(app_dir, tmp_path / "CIF2Peaks_Windows_Portable.zip")
 
     with ZipFile(zip_path) as archive:
         names = set(archive.namelist())
-    assert "XRD Atlas/XRD Atlas.exe" in names
-    assert "XRD Atlas/XRD Atlas Quick Export.exe" in names
-    assert "XRD Atlas/README_WINDOWS.txt" in names
-    assert "XRD Atlas/windows_self_test.bat" in names
-    assert "XRD Atlas/examples/cif/demo.cif" in names
-    assert "XRD Atlas/_internal/tcl86t.dll" in names
-    assert "XRD Atlas/_internal/tk86t.dll" in names
-    assert "XRD Atlas/_internal/_tcl_data/init.tcl" in names
-    assert "XRD Atlas/_internal/_tk_data/tk.tcl" in names
+    assert "CIF2Peaks/CIF2Peaks.exe" in names
+    assert "CIF2Peaks/CIF2Peaks Quick Export.exe" in names
+    assert "CIF2Peaks/README_WINDOWS.txt" in names
+    assert "CIF2Peaks/windows_self_test.bat" in names
+    assert "CIF2Peaks/examples/cif/demo.cif" in names
+    assert "CIF2Peaks/_internal/tcl86t.dll" in names
+    assert "CIF2Peaks/_internal/tk86t.dll" in names
+    assert "CIF2Peaks/_internal/_tcl_data/init.tcl" in names
+    assert "CIF2Peaks/_internal/_tk_data/tk.tcl" in names
 
 
 def test_windows_portable_zip_requires_tcl_tk_runtime_data(tmp_path: Path) -> None:
     from scripts.package_windows_portable import package_portable_app
 
-    app_dir = tmp_path / "XRD Atlas"
+    app_dir = tmp_path / "CIF2Peaks"
     for relative in (
-        "XRD Atlas.exe",
-        "XRD Atlas Quick Export.exe",
+        "CIF2Peaks.exe",
+        "CIF2Peaks Quick Export.exe",
         "README_WINDOWS.txt",
         "windows_self_test.bat",
         "_internal/tcl86t.dll",
@@ -320,7 +320,7 @@ def test_windows_portable_zip_requires_tcl_tk_runtime_data(tmp_path: Path) -> No
         path.write_text("x", encoding="utf-8")
 
     with pytest.raises(FileNotFoundError) as exc_info:
-        package_portable_app(app_dir, tmp_path / "XRD_Atlas_Windows_Portable.zip")
+        package_portable_app(app_dir, tmp_path / "CIF2Peaks_Windows_Portable.zip")
 
     message = str(exc_info.value)
     assert "_internal/_tcl_data/init.tcl" in message
@@ -328,7 +328,7 @@ def test_windows_portable_zip_requires_tcl_tk_runtime_data(tmp_path: Path) -> No
 
 
 def test_windows_quick_export_entry_exports_without_python_gui(tmp_path: Path) -> None:
-    script = ROOT / "scripts" / "xrd_atlas_quick_export_windows.py"
+    script = ROOT / "scripts" / "cif2peaks_quick_export_windows.py"
     cif_path = tmp_path / TI_BETA_CIF.name
     cif_path.write_bytes(TI_BETA_CIF.read_bytes())
 
@@ -343,13 +343,13 @@ def test_windows_quick_export_entry_exports_without_python_gui(tmp_path: Path) -
     )
 
     assert result.returncode == 0, result.stderr
-    expected_output = tmp_path / f"{cif_path.stem}_XRD峰表.xlsx"
+    expected_output = tmp_path / f"{cif_path.stem}_CIF2Peaks峰表.xlsx"
     assert expected_output.name in result.stdout
     assert expected_output.exists()
 
 
 def test_windows_quick_export_entry_treats_diagnostic_workbook_as_success(tmp_path: Path) -> None:
-    script = ROOT / "scripts" / "xrd_atlas_quick_export_windows.py"
+    script = ROOT / "scripts" / "cif2peaks_quick_export_windows.py"
     bad_cif = tmp_path / "bad.cif"
     bad_cif.write_text("data_bad\n_cell_length_a 3\n", encoding="utf-8")
 
@@ -363,17 +363,17 @@ def test_windows_quick_export_entry_treats_diagnostic_workbook_as_success(tmp_pa
         check=False,
     )
 
-    expected_output = tmp_path / "bad_XRD峰表.xlsx"
+    expected_output = tmp_path / "bad_CIF2Peaks峰表.xlsx"
     assert result.returncode == 0, result.stderr
     assert expected_output.exists()
     assert "未得到可用峰记录" in result.stdout
     assert "Summary" in result.stdout
 
 
-def test_xrd_atlas_single_cif_peak_table_and_energy_shift() -> None:
-    service = XrdAtlasService()
+def test_cif2peaks_single_cif_peak_table_and_energy_shift() -> None:
+    service = Cif2PeaksService()
     phase = service.load_phase(TI_BETA_CIF)
-    settings = XrdAtlasSettings(input_mode="energy", energy_keV=8.0478, wavelength_A=1.5406)
+    settings = Cif2PeaksSettings(input_mode="energy", energy_keV=8.0478, wavelength_A=1.5406)
     service.simulate_phase(phase, settings)
     assert phase.result is not None
     rows = combined_peak_rows([phase])
@@ -385,7 +385,7 @@ def test_xrd_atlas_single_cif_peak_table_and_energy_shift() -> None:
     high_energy_phase = service.load_phase(TI_BETA_CIF)
     service.simulate_phase(
         high_energy_phase,
-        XrdAtlasSettings(input_mode="energy", energy_keV=20.0, wavelength_A=1.5406),
+        Cif2PeaksSettings(input_mode="energy", energy_keV=20.0, wavelength_A=1.5406),
     )
     assert high_energy_phase.result is not None
     assert high_energy_phase.result.peaks[0].two_theta_deg < phase.result.peaks[0].two_theta_deg
@@ -393,9 +393,9 @@ def test_xrd_atlas_single_cif_peak_table_and_energy_shift() -> None:
 
 
 def test_hexagonal_hkl_labels_preserve_four_index_notation(tmp_path: Path) -> None:
-    service = XrdAtlasService()
+    service = Cif2PeaksService()
     phase = service.load_phase(TI_NB_HCP_CIF)
-    settings = XrdAtlasSettings()
+    settings = Cif2PeaksSettings()
     service.simulate_phase(phase, settings)
 
     rows = combined_peak_rows([phase])
@@ -411,14 +411,14 @@ def test_hexagonal_hkl_labels_preserve_four_index_notation(tmp_path: Path) -> No
     assert "(1 0 -1 1)" in {row["hkl"] for row in rows}
 
     csv_output = tmp_path / "hcp_hkl.csv"
-    export_peak_reference_csv(XrdAtlasExportPayload([phase], settings), csv_output)
+    export_peak_reference_csv(Cif2PeaksExportPayload([phase], settings), csv_output)
 
     with csv_output.open("r", encoding="utf-8-sig", newline="") as handle:
         csv_rows = list(csv.DictReader(handle))
     assert csv_rows[0]["hkl"] == "(1 0 -1 0)"
 
     workbook_output = tmp_path / "hcp_hkl.xlsx"
-    export_xrd_atlas_workbook(XrdAtlasExportPayload([phase], settings), workbook_output)
+    export_cif2peaks_workbook(Cif2PeaksExportPayload([phase], settings), workbook_output)
 
     combined_sheet = _worksheet_rows(workbook_output, 2)
     headers = combined_sheet[0]
@@ -429,9 +429,9 @@ def test_hexagonal_hkl_labels_preserve_four_index_notation(tmp_path: Path) -> No
 
 
 def test_cubic_hkl_labels_remain_three_index_notation() -> None:
-    service = XrdAtlasService()
+    service = Cif2PeaksService()
     phase = service.load_phase(TI_BETA_CIF)
-    service.simulate_phase(phase, XrdAtlasSettings())
+    service.simulate_phase(phase, Cif2PeaksSettings())
 
     rows = combined_peak_rows([phase])
     first = rows[0]
@@ -444,12 +444,12 @@ def test_cubic_hkl_labels_remain_three_index_notation() -> None:
     assert first["l"] == 0
 
 
-def test_xrd_atlas_loads_occupancy_conflict_cif_with_warning(tmp_path: Path) -> None:
+def test_cif2peaks_loads_occupancy_conflict_cif_with_warning(tmp_path: Path) -> None:
     cif_path = _write_ni_occupancy_cif(tmp_path / "Ni.cif")
-    service = XrdAtlasService()
+    service = Cif2PeaksService()
 
     phase = service.load_phase(cif_path)
-    service.simulate_phase(phase, XrdAtlasSettings())
+    service.simulate_phase(phase, Cif2PeaksSettings())
 
     assert phase.error is None
     assert phase.result is not None
@@ -457,9 +457,9 @@ def test_xrd_atlas_loads_occupancy_conflict_cif_with_warning(tmp_path: Path) -> 
     assert any("occupancy" in warning.lower() for warning in phase.warning_messages)
 
 
-def test_xrd_atlas_loads_standardized_unitcell_from_multi_block_cif(tmp_path: Path) -> None:
+def test_cif2peaks_loads_standardized_unitcell_from_multi_block_cif(tmp_path: Path) -> None:
     cif_path = _write_multi_block_standardized_cif(tmp_path / "multi_block.cif")
-    service = XrdAtlasService()
+    service = Cif2PeaksService()
 
     phase = service.load_phase(cif_path)
 
@@ -469,10 +469,10 @@ def test_xrd_atlas_loads_standardized_unitcell_from_multi_block_cif(tmp_path: Pa
     assert phase.crystal.cell_parameters[:3] == (3.0, 3.0, 3.0)
 
 
-def test_xrd_atlas_batch_loads_real_cifs_and_keeps_occupancy_warning() -> None:
-    service = XrdAtlasService()
+def test_cif2peaks_batch_loads_real_cifs_and_keeps_occupancy_warning() -> None:
+    service = Cif2PeaksService()
     phases = service.load_phases(_nb_hea_cif_paths())
-    service.simulate_phases(phases, XrdAtlasSettings())
+    service.simulate_phases(phases, Cif2PeaksSettings())
 
     by_name = {phase.cif_path.name: phase for phase in phases}
     assert list(by_name) == ["AlNi.cif", "Cr2Nb.cif", "FeCr.cif", "Ni.cif", "Ni3Al.cif"]
@@ -491,14 +491,14 @@ def test_xrd_atlas_batch_loads_real_cifs_and_keeps_occupancy_warning() -> None:
     assert any("occupancy" in warning.lower() for warning in by_name["Ni.cif"].warning_messages)
 
 
-def test_xrd_atlas_exports_simple_phase_hkl_d_two_theta_csv(tmp_path: Path) -> None:
-    service = XrdAtlasService()
+def test_cif2peaks_exports_simple_phase_hkl_d_two_theta_csv(tmp_path: Path) -> None:
+    service = Cif2PeaksService()
     phases = service.load_phases(_nb_hea_cif_paths())
-    settings = XrdAtlasSettings()
+    settings = Cif2PeaksSettings()
     service.simulate_phases(phases, settings)
     output = tmp_path / "phase_hkl_d_2theta.csv"
 
-    export_peak_reference_csv(XrdAtlasExportPayload(phases, settings), output)
+    export_peak_reference_csv(Cif2PeaksExportPayload(phases, settings), output)
 
     with output.open("r", encoding="utf-8-sig", newline="") as handle:
         rows = list(csv.DictReader(handle))
@@ -509,7 +509,7 @@ def test_xrd_atlas_exports_simple_phase_hkl_d_two_theta_csv(tmp_path: Path) -> N
     assert all(float(row["d_A"]) > 0 and float(row["two_theta_deg"]) > 0 for row in rows)
 
 
-def test_xrd_atlas_batch_export_defaults_to_excel_from_many_cifs(tmp_path: Path) -> None:
+def test_cif2peaks_batch_export_defaults_to_excel_from_many_cifs(tmp_path: Path) -> None:
     output = tmp_path / "many_cif_reference.xlsx"
 
     phases = batch_export_peak_reference(_nb_hea_cif_paths(), output)
@@ -535,7 +535,7 @@ def test_xrd_atlas_batch_export_defaults_to_excel_from_many_cifs(tmp_path: Path)
     assert all(float(row[5]) > 0 and float(row[6]) > 0 for row in data_rows)
 
 
-def test_xrd_atlas_batch_export_zr_hydride_multi_block_cifs(tmp_path: Path) -> None:
+def test_cif2peaks_batch_export_zr_hydride_multi_block_cifs(tmp_path: Path) -> None:
     output = tmp_path / "zr_hydride_reference.xlsx"
 
     phases = batch_export_peak_reference(_zr_hydride_cif_paths(), output)
@@ -553,7 +553,7 @@ def test_xrd_atlas_batch_export_zr_hydride_multi_block_cifs(tmp_path: Path) -> N
     assert all(float(row[5]) > 0 and float(row[6]) > 0 for row in data_rows)
 
 
-def test_xrd_atlas_batch_export_can_still_write_csv(tmp_path: Path) -> None:
+def test_cif2peaks_batch_export_can_still_write_csv(tmp_path: Path) -> None:
     output = tmp_path / "many_cif_reference.csv"
 
     phases = batch_export_peak_reference(_nb_hea_cif_paths(), output)
@@ -566,15 +566,15 @@ def test_xrd_atlas_batch_export_can_still_write_csv(tmp_path: Path) -> None:
     assert {row["phase_name"] for row in rows} >= {"AlNi", "Cr2Nb", "FeCr", "Ni", "Ni3Al"}
 
 
-def test_xrd_atlas_batch_load_isolates_unrecoverable_bad_cif(tmp_path: Path) -> None:
+def test_cif2peaks_batch_load_isolates_unrecoverable_bad_cif(tmp_path: Path) -> None:
     bad_cif = tmp_path / "bad.cif"
     bad_cif.write_text("data_bad\n_cell_length_a 3\n", encoding="utf-8")
-    service = XrdAtlasService()
+    service = Cif2PeaksService()
 
     phases = service.load_phases([TI_BETA_CIF, bad_cif])
-    service.simulate_phases(phases, XrdAtlasSettings())
+    service.simulate_phases(phases, Cif2PeaksSettings())
     output = tmp_path / "with_bad_cif.xlsx"
-    export_xrd_atlas_workbook(XrdAtlasExportPayload(phases, XrdAtlasSettings()), output)
+    export_cif2peaks_workbook(Cif2PeaksExportPayload(phases, Cif2PeaksSettings()), output)
 
     assert len(phases) == 2
     assert phases[0].result is not None
@@ -589,13 +589,13 @@ def test_xrd_atlas_batch_load_isolates_unrecoverable_bad_cif(tmp_path: Path) -> 
     assert "[Errno" not in summary_text
 
 
-def test_xrd_atlas_multi_phase_workbook_export(tmp_path: Path) -> None:
-    service = XrdAtlasService()
+def test_cif2peaks_multi_phase_workbook_export(tmp_path: Path) -> None:
+    service = Cif2PeaksService()
     phases = [service.load_phase(TI_BETA_CIF), service.load_phase(TI_NB_HCP_CIF)]
-    settings = XrdAtlasSettings()
+    settings = Cif2PeaksSettings()
     service.simulate_phases(phases, settings)
-    output = tmp_path / "xrd_atlas_export.xlsx"
-    export_xrd_atlas_workbook(XrdAtlasExportPayload(phases, settings), output)
+    output = tmp_path / "cif2peaks_export.xlsx"
+    export_cif2peaks_workbook(Cif2PeaksExportPayload(phases, settings), output)
     with ZipFile(output) as archive:
         workbook = archive.read("xl/workbook.xml").decode("utf-8")
         combined = archive.read("xl/worksheets/sheet2.xml").decode("utf-8")
@@ -606,14 +606,14 @@ def test_xrd_atlas_multi_phase_workbook_export(tmp_path: Path) -> None:
     assert combined.count("<row ") > 2
 
 
-def test_xrd_atlas_workbook_peak_sheets_are_excel_friendly(tmp_path: Path) -> None:
-    service = XrdAtlasService()
+def test_cif2peaks_workbook_peak_sheets_are_excel_friendly(tmp_path: Path) -> None:
+    service = Cif2PeaksService()
     phases = [service.load_phase(TI_BETA_CIF), service.load_phase(TI_NB_HCP_CIF)]
-    settings = XrdAtlasSettings()
+    settings = Cif2PeaksSettings()
     service.simulate_phases(phases, settings)
     output = tmp_path / "friendly.xlsx"
 
-    export_xrd_atlas_workbook(XrdAtlasExportPayload(phases, settings), output)
+    export_cif2peaks_workbook(Cif2PeaksExportPayload(phases, settings), output)
 
     with ZipFile(output) as archive:
         combined = archive.read("xl/worksheets/sheet2.xml").decode("utf-8")
@@ -624,14 +624,14 @@ def test_xrd_atlas_workbook_peak_sheets_are_excel_friendly(tmp_path: Path) -> No
     assert 'width="24"' in combined
 
 
-def test_xrd_atlas_workbook_opens_with_chinese_user_guide(tmp_path: Path) -> None:
-    service = XrdAtlasService()
+def test_cif2peaks_workbook_opens_with_chinese_user_guide(tmp_path: Path) -> None:
+    service = Cif2PeaksService()
     phase = service.load_phase(TI_BETA_CIF)
-    settings = XrdAtlasSettings()
+    settings = Cif2PeaksSettings()
     service.simulate_phase(phase, settings)
     output = tmp_path / "guide.xlsx"
 
-    export_xrd_atlas_workbook(XrdAtlasExportPayload([phase], settings), output)
+    export_cif2peaks_workbook(Cif2PeaksExportPayload([phase], settings), output)
 
     with ZipFile(output) as archive:
         workbook = archive.read("xl/workbook.xml").decode("utf-8")
@@ -645,14 +645,14 @@ def test_xrd_atlas_workbook_opens_with_chinese_user_guide(tmp_path: Path) -> Non
     assert "two_theta_current_deg" in guide_xml
 
 
-def test_xrd_atlas_workbook_includes_beginner_chinese_peak_table(tmp_path: Path) -> None:
-    service = XrdAtlasService()
+def test_cif2peaks_workbook_includes_beginner_chinese_peak_table(tmp_path: Path) -> None:
+    service = Cif2PeaksService()
     phases = [service.load_phase(TI_BETA_CIF), service.load_phase(TI_NB_HCP_CIF)]
-    settings = XrdAtlasSettings()
+    settings = Cif2PeaksSettings()
     service.simulate_phases(phases, settings)
     output = tmp_path / "beginner_table.xlsx"
 
-    export_xrd_atlas_workbook(XrdAtlasExportPayload(phases, settings), output)
+    export_cif2peaks_workbook(Cif2PeaksExportPayload(phases, settings), output)
 
     with ZipFile(output) as archive:
         workbook = archive.read("xl/workbook.xml").decode("utf-8")
@@ -679,14 +679,14 @@ def test_xrd_atlas_workbook_includes_beginner_chinese_peak_table(tmp_path: Path)
     assert "中文列名" in guide_xml
 
 
-def test_xrd_atlas_workbook_registers_stylesheet_for_export_polish(tmp_path: Path) -> None:
-    service = XrdAtlasService()
+def test_cif2peaks_workbook_registers_stylesheet_for_export_polish(tmp_path: Path) -> None:
+    service = Cif2PeaksService()
     phases = [service.load_phase(TI_BETA_CIF), service.load_phase(TI_NB_HCP_CIF)]
-    settings = XrdAtlasSettings()
+    settings = Cif2PeaksSettings()
     service.simulate_phases(phases, settings)
     output = tmp_path / "styled.xlsx"
 
-    export_xrd_atlas_workbook(XrdAtlasExportPayload(phases, settings), output)
+    export_cif2peaks_workbook(Cif2PeaksExportPayload(phases, settings), output)
 
     with ZipFile(output) as archive:
         content_types = archive.read("[Content_Types].xml").decode("utf-8")
@@ -701,14 +701,14 @@ def test_xrd_atlas_workbook_registers_stylesheet_for_export_polish(tmp_path: Pat
     assert "FFF2CC" in styles_xml
 
 
-def test_xrd_atlas_combined_peak_sheets_color_rows_by_phase(tmp_path: Path) -> None:
-    service = XrdAtlasService()
+def test_cif2peaks_combined_peak_sheets_color_rows_by_phase(tmp_path: Path) -> None:
+    service = Cif2PeaksService()
     phases = [service.load_phase(TI_BETA_CIF), service.load_phase(TI_NB_HCP_CIF)]
-    settings = XrdAtlasSettings()
+    settings = Cif2PeaksSettings()
     service.simulate_phases(phases, settings)
     output = tmp_path / "phase_colors.xlsx"
 
-    export_xrd_atlas_workbook(XrdAtlasExportPayload(phases, settings), output)
+    export_cif2peaks_workbook(Cif2PeaksExportPayload(phases, settings), output)
 
     combined_rows = _worksheet_rows(output, 2)
     combined_styles = _worksheet_cell_styles(output, 2)
@@ -729,14 +729,14 @@ def test_xrd_atlas_combined_peak_sheets_color_rows_by_phase(tmp_path: Path) -> N
     assert combined_styles[second_phase_row][0] != combined_styles[1][0]
 
 
-def test_xrd_atlas_user_guide_explains_beginner_columns_and_limits(tmp_path: Path) -> None:
-    service = XrdAtlasService()
+def test_cif2peaks_user_guide_explains_beginner_columns_and_limits(tmp_path: Path) -> None:
+    service = Cif2PeaksService()
     phases = [service.load_phase(TI_BETA_CIF), service.load_phase(TI_NB_HCP_CIF)]
-    settings = XrdAtlasSettings()
+    settings = Cif2PeaksSettings()
     service.simulate_phases(phases, settings)
     output = tmp_path / "guide_detail.xlsx"
 
-    export_xrd_atlas_workbook(XrdAtlasExportPayload(phases, settings), output)
+    export_cif2peaks_workbook(Cif2PeaksExportPayload(phases, settings), output)
 
     guide_text = "\n".join("|".join(row) for row in _worksheet_rows(output, 6))
 
@@ -750,7 +750,7 @@ def test_xrd_atlas_user_guide_explains_beginner_columns_and_limits(tmp_path: Pat
 
 def test_batch_module_help_and_package_main_cli(tmp_path: Path) -> None:
     help_result = subprocess.run(
-        [sys.executable, "-m", "xrd_atlas.batch", "--help"],
+        [sys.executable, "-m", "cif2peaks.batch", "--help"],
         cwd=ROOT,
         env=_subprocess_env(),
         text=True,
@@ -763,7 +763,7 @@ def test_batch_module_help_and_package_main_cli(tmp_path: Path) -> None:
 
     output = tmp_path / "package_main.xlsx"
     run_result = subprocess.run(
-        [sys.executable, "-m", "xrd_atlas", str(TI_BETA_CIF), "-o", str(output)],
+        [sys.executable, "-m", "cif2peaks", str(TI_BETA_CIF), "-o", str(output)],
         cwd=ROOT,
         env=_subprocess_env(),
         text=True,
@@ -778,7 +778,7 @@ def test_batch_module_help_and_package_main_cli(tmp_path: Path) -> None:
 
 def test_batch_cli_default_output_is_excel(tmp_path: Path) -> None:
     result = subprocess.run(
-        [sys.executable, "-m", "xrd_atlas.batch", str(TI_BETA_CIF)],
+        [sys.executable, "-m", "cif2peaks.batch", str(TI_BETA_CIF)],
         cwd=tmp_path,
         env=_subprocess_env(),
         text=True,
@@ -788,13 +788,13 @@ def test_batch_cli_default_output_is_excel(tmp_path: Path) -> None:
     )
 
     assert result.returncode == 0, result.stderr
-    assert (tmp_path / "xrd_peak_reference.xlsx").exists()
-    assert not (tmp_path / "xrd_peak_reference.csv").exists()
+    assert (tmp_path / "cif2peaks_peak_reference.xlsx").exists()
+    assert not (tmp_path / "cif2peaks_peak_reference.csv").exists()
 
 
 def test_simple_gui_builds_energy_settings_from_user_inputs() -> None:
-    from xrd_atlas.constants import X_RAY_ENERGY_WAVELENGTH_KEV_A
-    from xrd_atlas.gui import build_gui_settings
+    from cif2peaks.constants import X_RAY_ENERGY_WAVELENGTH_KEV_A
+    from cif2peaks.gui import build_gui_settings
 
     settings = build_gui_settings("20.0", "5", "120")
 
@@ -806,7 +806,7 @@ def test_simple_gui_builds_energy_settings_from_user_inputs() -> None:
 
 
 def test_beginner_gui_defaults_to_cu_ka_without_user_parameters() -> None:
-    from xrd_atlas.gui import build_beginner_gui_settings
+    from cif2peaks.gui import build_beginner_gui_settings
 
     settings = build_beginner_gui_settings()
 
@@ -817,7 +817,7 @@ def test_beginner_gui_defaults_to_cu_ka_without_user_parameters() -> None:
 
 
 def test_beginner_gui_d_range_defaults_to_unrestricted_cu_ka() -> None:
-    from xrd_atlas.gui import build_beginner_gui_settings_from_d_range
+    from cif2peaks.gui import build_beginner_gui_settings_from_d_range
 
     settings = build_beginner_gui_settings_from_d_range()
 
@@ -830,8 +830,8 @@ def test_beginner_gui_d_range_defaults_to_unrestricted_cu_ka() -> None:
 
 
 def test_beginner_gui_d_range_converts_boundaries_for_cu_ka() -> None:
-    from xrd_atlas.constants import DEFAULT_XRD_WAVELENGTH_A
-    from xrd_atlas.gui import build_beginner_gui_settings_from_d_range
+    from cif2peaks.constants import DEFAULT_XRD_WAVELENGTH_A
+    from cif2peaks.gui import build_beginner_gui_settings_from_d_range
 
     lower_bound = build_beginner_gui_settings_from_d_range(d_min_A=str(DEFAULT_XRD_WAVELENGTH_A))
     upper_bound = build_beginner_gui_settings_from_d_range(d_max_A=str(DEFAULT_XRD_WAVELENGTH_A))
@@ -846,8 +846,8 @@ def test_beginner_gui_d_range_converts_boundaries_for_cu_ka() -> None:
 
 
 def test_beginner_gui_d_range_uses_manual_energy_before_conversion() -> None:
-    from xrd_atlas.constants import X_RAY_ENERGY_WAVELENGTH_KEV_A
-    from xrd_atlas.gui import build_beginner_gui_settings_from_d_range
+    from cif2peaks.constants import X_RAY_ENERGY_WAVELENGTH_KEV_A
+    from cif2peaks.gui import build_beginner_gui_settings_from_d_range
 
     settings = build_beginner_gui_settings_from_d_range(d_min_A="1.0", energy_keV="20.0", xray_preset="83 keV")
 
@@ -858,8 +858,8 @@ def test_beginner_gui_d_range_uses_manual_energy_before_conversion() -> None:
 
 
 def test_beginner_gui_d_range_uses_visible_energy_presets_before_conversion() -> None:
-    from xrd_atlas.constants import X_RAY_ENERGY_WAVELENGTH_KEV_A
-    from xrd_atlas.gui import build_beginner_gui_settings_from_d_range
+    from cif2peaks.constants import X_RAY_ENERGY_WAVELENGTH_KEV_A
+    from cif2peaks.gui import build_beginner_gui_settings_from_d_range
 
     low_energy = build_beginner_gui_settings_from_d_range(d_min_A="1.0", xray_preset="30 keV")
     high_energy = build_beginner_gui_settings_from_d_range(d_min_A="1.0", xray_preset="83 keV")
@@ -879,14 +879,14 @@ def test_beginner_gui_d_range_uses_visible_energy_presets_before_conversion() ->
     ],
 )
 def test_beginner_gui_d_range_rejects_invalid_inputs(d_min_A: str, d_max_A: str, expected_error: str) -> None:
-    from xrd_atlas.gui import build_beginner_gui_settings_from_d_range
+    from cif2peaks.gui import build_beginner_gui_settings_from_d_range
 
     with pytest.raises(ValueError, match=expected_error):
         build_beginner_gui_settings_from_d_range(d_min_A=d_min_A, d_max_A=d_max_A)
 
 
 def test_beginner_gui_keeps_cu_ka_when_energy_is_blank() -> None:
-    from xrd_atlas.gui import build_beginner_gui_settings
+    from cif2peaks.gui import build_beginner_gui_settings
 
     settings = build_beginner_gui_settings(energy_keV=" ")
 
@@ -895,7 +895,7 @@ def test_beginner_gui_keeps_cu_ka_when_energy_is_blank() -> None:
 
 
 def test_beginner_gui_uses_custom_energy_when_provided() -> None:
-    from xrd_atlas.gui import build_beginner_gui_settings
+    from cif2peaks.gui import build_beginner_gui_settings
 
     settings = build_beginner_gui_settings(energy_keV="20.0", two_theta_min="5", two_theta_max="120")
 
@@ -906,8 +906,8 @@ def test_beginner_gui_uses_custom_energy_when_provided() -> None:
 
 
 def test_beginner_gui_uses_visible_energy_presets() -> None:
-    from xrd_atlas.constants import X_RAY_ENERGY_WAVELENGTH_KEV_A
-    from xrd_atlas.gui import build_beginner_gui_settings
+    from cif2peaks.constants import X_RAY_ENERGY_WAVELENGTH_KEV_A
+    from cif2peaks.gui import build_beginner_gui_settings
 
     low_energy = build_beginner_gui_settings(xray_preset="30 keV")
     high_energy = build_beginner_gui_settings(xray_preset="83 keV")
@@ -921,8 +921,8 @@ def test_beginner_gui_uses_visible_energy_presets() -> None:
 
 
 def test_beginner_gui_manual_energy_overrides_selected_preset() -> None:
-    from xrd_atlas.constants import X_RAY_ENERGY_WAVELENGTH_KEV_A
-    from xrd_atlas.gui import build_beginner_gui_settings
+    from cif2peaks.constants import X_RAY_ENERGY_WAVELENGTH_KEV_A
+    from cif2peaks.gui import build_beginner_gui_settings
 
     settings = build_beginner_gui_settings(energy_keV="20.0", xray_preset="83 keV")
 
@@ -932,17 +932,17 @@ def test_beginner_gui_manual_energy_overrides_selected_preset() -> None:
 
 
 def test_beginner_gui_suggests_clear_output_path(tmp_path: Path) -> None:
-    from xrd_atlas.gui import suggest_output_path
+    from cif2peaks.gui import suggest_output_path
 
     single = suggest_output_path([tmp_path / "Ti.cif"])
     many = suggest_output_path([tmp_path / "Ti.cif", tmp_path / "TiB.cif"])
 
-    assert single == tmp_path / "Ti_XRD峰表.xlsx"
-    assert many == tmp_path / "XRD峰表_2个CIF.xlsx"
+    assert single == tmp_path / "Ti_CIF2Peaks峰表.xlsx"
+    assert many == tmp_path / "CIF2Peaks峰表_2个CIF.xlsx"
 
 
 def test_beginner_gui_turns_common_errors_into_chinese_guidance() -> None:
-    from xrd_atlas.gui import friendly_error_message
+    from cif2peaks.gui import friendly_error_message
 
     assert "请先添加" in friendly_error_message(ValueError("Select at least one CIF file."))
     assert "数字" in friendly_error_message(ValueError("2theta min must be a number."))
@@ -952,7 +952,7 @@ def test_beginner_gui_turns_common_errors_into_chinese_guidance() -> None:
 
 
 def test_beginner_gui_previews_cif_metadata_before_export(tmp_path: Path) -> None:
-    from xrd_atlas.gui import preview_simple_gui_inputs
+    from cif2peaks.gui import preview_simple_gui_inputs
 
     good_cif = tmp_path / TI_BETA_CIF.name
     bad_cif = tmp_path / "bad.cif"
@@ -983,7 +983,7 @@ def test_beginner_gui_previews_cif_metadata_before_export(tmp_path: Path) -> Non
 
 
 def test_gui_startup_collects_dragged_cif_files_and_folders(tmp_path: Path) -> None:
-    from xrd_atlas.gui import initial_gui_cif_paths
+    from cif2peaks.gui import initial_gui_cif_paths
 
     cif = tmp_path / "Ti.cif"
     uppercase_suffix_cif = tmp_path / "Ti_copy.CIF"
@@ -1001,7 +1001,7 @@ def test_gui_startup_collects_dragged_cif_files_and_folders(tmp_path: Path) -> N
 
 
 def test_gui_splits_drop_event_paths_with_spaces(tmp_path: Path) -> None:
-    from xrd_atlas.gui import split_drop_event_paths
+    from cif2peaks.gui import split_drop_event_paths
 
     spaced_cif = tmp_path / "Ti beta.cif"
     folder = tmp_path / "folder with spaces"
@@ -1013,7 +1013,7 @@ def test_gui_splits_drop_event_paths_with_spaces(tmp_path: Path) -> None:
 
 
 def test_gui_drop_adds_cifs_and_reports_ignored_inputs(tmp_path: Path) -> None:
-    from xrd_atlas.gui import add_gui_cif_inputs
+    from cif2peaks.gui import add_gui_cif_inputs
 
     cif = tmp_path / "Ti beta.cif"
     uppercase_cif = tmp_path / "Ti copy.CIF"
@@ -1036,26 +1036,26 @@ def test_gui_drop_adds_cifs_and_reports_ignored_inputs(tmp_path: Path) -> None:
 
 
 def test_quick_export_uses_dragged_cifs_and_smart_default_output(tmp_path: Path) -> None:
-    from xrd_atlas.quick_export import quick_export_xrd_atlas
+    from cif2peaks.quick_export import quick_export_cif2peaks
 
     cif1 = tmp_path / TI_BETA_CIF.name
     cif2 = tmp_path / TI_NB_HCP_CIF.name
     cif1.write_bytes(TI_BETA_CIF.read_bytes())
     cif2.write_bytes(TI_NB_HCP_CIF.read_bytes())
 
-    result = quick_export_xrd_atlas([cif1, cif2])
+    result = quick_export_cif2peaks([cif1, cif2])
 
-    assert result.output_path == tmp_path / "XRD峰表_2个CIF.xlsx"
+    assert result.output_path == tmp_path / "CIF2Peaks峰表_2个CIF.xlsx"
     assert result.output_path.exists()
     assert result.total_peaks > 0
 
 
 def test_quick_export_accepts_output_override(tmp_path: Path) -> None:
-    from xrd_atlas.quick_export import quick_export_xrd_atlas
+    from cif2peaks.quick_export import quick_export_cif2peaks
 
     output = tmp_path / "custom_result.xlsx"
 
-    result = quick_export_xrd_atlas([TI_BETA_CIF], output_path=output)
+    result = quick_export_cif2peaks([TI_BETA_CIF], output_path=output)
 
     assert result.output_path == output.resolve()
     assert output.exists()
@@ -1068,7 +1068,7 @@ def test_quick_export_cli_treats_diagnostic_workbook_as_success(tmp_path: Path) 
     bad_cif.write_text("data_bad\n_cell_length_a 3\n", encoding="utf-8")
 
     result = subprocess.run(
-        [sys.executable, "-m", "xrd_atlas.quick_export", str(bad_cif), "-o", str(output)],
+        [sys.executable, "-m", "cif2peaks.quick_export", str(bad_cif), "-o", str(output)],
         cwd=ROOT,
         env=_subprocess_env(),
         text=True,
@@ -1084,7 +1084,7 @@ def test_quick_export_cli_treats_diagnostic_workbook_as_success(tmp_path: Path) 
 
 
 def test_gui_completion_message_explains_diagnostic_workbook(tmp_path: Path) -> None:
-    from xrd_atlas.gui import gui_export_completion_text, run_simple_gui_export
+    from cif2peaks.gui import gui_export_completion_text, run_simple_gui_export
 
     bad_cif = tmp_path / "bad.cif"
     output = tmp_path / "diagnostic.xlsx"
@@ -1101,7 +1101,7 @@ def test_gui_completion_message_explains_diagnostic_workbook(tmp_path: Path) -> 
 
 
 def test_gui_open_result_prefers_excel_file(tmp_path: Path) -> None:
-    from xrd_atlas.gui import open_export_result
+    from cif2peaks.gui import open_export_result
 
     output = tmp_path / "result.xlsx"
     opened: list[str] = []
@@ -1113,7 +1113,7 @@ def test_gui_open_result_prefers_excel_file(tmp_path: Path) -> None:
 
 
 def test_gui_open_result_falls_back_to_folder_when_file_open_fails(tmp_path: Path) -> None:
-    from xrd_atlas.gui import open_export_result
+    from cif2peaks.gui import open_export_result
 
     output = tmp_path / "result.xlsx"
     opened: list[str] = []
@@ -1130,7 +1130,7 @@ def test_gui_open_result_falls_back_to_folder_when_file_open_fails(tmp_path: Pat
 
 
 def test_gui_export_summarizes_bad_cif_with_friendly_chinese_message(tmp_path: Path) -> None:
-    from xrd_atlas.gui import run_simple_gui_export
+    from cif2peaks.gui import run_simple_gui_export
 
     bad_cif = tmp_path / "bad.cif"
     bad_cif.write_text("data_bad\n_cell_length_a 3\n", encoding="utf-8")
@@ -1147,7 +1147,7 @@ def test_gui_export_summarizes_bad_cif_with_friendly_chinese_message(tmp_path: P
 
 
 def test_gui_configures_tcl_tk_environment_from_python_base(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    from xrd_atlas.gui import _configure_tcl_tk_environment
+    from cif2peaks.gui import _configure_tcl_tk_environment
 
     tcl_dir = tmp_path / "tcl" / "tcl8.6"
     tk_dir = tmp_path / "tcl" / "tk8.6"
@@ -1165,7 +1165,7 @@ def test_gui_configures_tcl_tk_environment_from_python_base(tmp_path: Path, monk
 
 
 def test_simple_gui_export_writes_xlsx_without_json_sidecar(tmp_path: Path) -> None:
-    from xrd_atlas.gui import run_simple_gui_export
+    from cif2peaks.gui import run_simple_gui_export
 
     output_without_suffix = tmp_path / "gui_reference"
 
@@ -1182,7 +1182,7 @@ def test_simple_gui_export_writes_xlsx_without_json_sidecar(tmp_path: Path) -> N
 
 
 def test_simple_gui_export_filters_by_d_range_and_records_summary(tmp_path: Path) -> None:
-    from xrd_atlas.gui import run_simple_gui_export
+    from cif2peaks.gui import run_simple_gui_export
 
     output = tmp_path / "d_filtered.xlsx"
 

@@ -12,7 +12,7 @@ from zipfile import ZIP_DEFLATED, ZipFile
 import numpy as np
 
 from .hkl import format_hkl
-from .models import ExperimentalPattern, XrdAtlasExportPayload, XrdAtlasPeakRow, XrdPhase
+from .models import ExperimentalPattern, Cif2PeaksExportPayload, Cif2PeaksPeakRow, XrdPhase
 from .service import phase_peak_rows
 from .utils import friendly_cif_issue_message, now_iso, package_versions
 
@@ -98,11 +98,11 @@ def _to_jsonable(value: Any) -> Any:
     return value
 
 
-def _row_to_dict(row: XrdAtlasPeakRow) -> dict[str, Any]:
+def _row_to_dict(row: Cif2PeaksPeakRow) -> dict[str, Any]:
     return asdict(row)
 
 
-def _format_peak_row_hkl(row: XrdAtlasPeakRow) -> str:
+def _format_peak_row_hkl(row: Cif2PeaksPeakRow) -> str:
     if row.i is None:
         return format_hkl((row.h, row.k, row.l))
     return format_hkl((row.h, row.k, row.i, row.l))
@@ -152,7 +152,7 @@ def peak_reference_rows(phases: list[XrdPhase]) -> list[dict[str, Any]]:
     return rows
 
 
-def export_peak_reference_csv(payload: XrdAtlasExportPayload, output_path: str | Path) -> None:
+def export_peak_reference_csv(payload: Cif2PeaksExportPayload, output_path: str | Path) -> None:
     path = Path(output_path)
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("w", encoding="utf-8-sig", newline="") as handle:
@@ -161,9 +161,9 @@ def export_peak_reference_csv(payload: XrdAtlasExportPayload, output_path: str |
         writer.writerows(peak_reference_rows(payload.phases))
 
 
-def _summary_rows(payload: XrdAtlasExportPayload) -> list[list[Any]]:
+def _summary_rows(payload: Cif2PeaksExportPayload) -> list[list[Any]]:
     rows: list[list[Any]] = [
-        ["XRD Atlas export", "theoretical powder XRD simulation; not experimental fitting"],
+        ["CIF2Peaks export", "theoretical powder XRD simulation; not experimental fitting"],
         ["exported_at", now_iso()],
         ["xray_input_mode", payload.settings.input_mode],
         ["source_preset", payload.settings.source_preset],
@@ -207,9 +207,9 @@ def _experimental_rows(patterns: list[ExperimentalPattern]) -> list[list[Any]]:
     return rows
 
 
-def _user_guide_rows(payload: XrdAtlasExportPayload) -> list[list[Any]]:
+def _user_guide_rows(payload: Cif2PeaksExportPayload) -> list[list[Any]]:
     return [
-        ["XRD Atlas 使用说明", ""],
+        ["CIF2Peaks 使用说明", ""],
         ["这是什么", "从 CIF 晶体结构计算理论粉末 XRD 峰表，便于在 Excel、Origin 或 Python 中继续分析。"],
         [
             "默认参数",
@@ -257,11 +257,11 @@ def _user_guide_rows(payload: XrdAtlasExportPayload) -> list[list[Any]]:
     ]
 
 
-def export_xrd_atlas_json(payload: XrdAtlasExportPayload, output_path: str | Path) -> None:
+def export_cif2peaks_json(payload: Cif2PeaksExportPayload, output_path: str | Path) -> None:
     data = {
         "metadata": {
             "exported_at": now_iso(),
-            "application": "XRD Atlas",
+            "application": "CIF2Peaks",
             "coordinate_definitions": {
                 "q_1_over_A": "4*pi*sin(theta)/lambda",
                 "g_1_over_A": "1/d",
@@ -408,7 +408,7 @@ def _is_table_sheet(rows: list[list[Any]]) -> bool:
 
 
 def _is_user_guide_sheet(rows: list[list[Any]]) -> bool:
-    return bool(rows and rows[0] and rows[0][0] == "XRD Atlas 使用说明")
+    return bool(rows and rows[0] and rows[0][0] == "CIF2Peaks 使用说明")
 
 
 def _table_sheet_preamble(rows: list[list[Any]]) -> str:
@@ -533,7 +533,7 @@ def _combined_peak_rows_with_phase_styles(phases: list[XrdPhase]) -> tuple[list[
     return rows, style_ids
 
 
-def export_xrd_atlas_workbook(payload: XrdAtlasExportPayload, output_path: str | Path) -> None:
+def export_cif2peaks_workbook(payload: Cif2PeaksExportPayload, output_path: str | Path) -> None:
     sheets: list[tuple[str, list[list[Any]], list[int] | None]] = []
     used: set[str] = set()
     combined_rows, combined_row_style_ids = _combined_peak_rows_with_phase_styles(payload.phases)
@@ -606,11 +606,11 @@ def export_xrd_atlas_workbook(payload: XrdAtlasExportPayload, output_path: str |
             "docProps/core.xml",
             '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
             '<cp:coreProperties xmlns:cp="http://schemas.openxmlformats.org/package/2006/metadata/core-properties" '
-            'xmlns:dc="http://purl.org/dc/elements/1.1/"><dc:title>XRD Atlas export</dc:title></cp:coreProperties>',
+            'xmlns:dc="http://purl.org/dc/elements/1.1/"><dc:title>CIF2Peaks export</dc:title></cp:coreProperties>',
         )
         archive.writestr(
             "docProps/app.xml",
             '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
             '<Properties xmlns="http://schemas.openxmlformats.org/officeDocument/2006/extended-properties">'
-            "<Application>XRD Atlas</Application></Properties>",
+            "<Application>CIF2Peaks</Application></Properties>",
         )

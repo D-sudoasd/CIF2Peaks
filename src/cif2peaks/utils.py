@@ -20,7 +20,7 @@ def now_iso() -> str:
 
 
 def package_versions() -> dict[str, str]:
-    packages = ("xrd-atlas", "numpy", "pymatgen", "gemmi", "spglib")
+    packages = ("cif2peaks", "numpy", "pymatgen", "gemmi", "spglib")
     versions: dict[str, str] = {}
     for package in packages:
         try:

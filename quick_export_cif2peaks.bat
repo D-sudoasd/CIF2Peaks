@@ -23,7 +23,7 @@ if not defined PYTHON_EXE (
 
 if not defined PYTHON_EXE (
     echo Python 3.11 or newer was not found.
-    echo Install Python 3.11+, or use dist\XRD Atlas\XRD Atlas.exe if it has been built.
+    echo Install Python 3.11+, or use dist\CIF2Peaks\CIF2Peaks.exe if it has been built.
     pause
     exit /b 1
 )
@@ -37,20 +37,20 @@ if "%~1"=="" (
 set "PYTHONUTF8=1"
 set "PYTHONPATH=%CD%\src;%PYTHONPATH%"
 
-"%PYTHON_EXE%" %PYTHON_ARGS% -c "import xrd_atlas.quick_export" >nul 2>nul
+"%PYTHON_EXE%" %PYTHON_ARGS% -c "import cif2peaks.quick_export" >nul 2>nul
 if errorlevel 1 (
-    echo Installing XRD Atlas dependencies. Please wait...
+    echo Installing CIF2Peaks dependencies. Please wait...
     "%PYTHON_EXE%" %PYTHON_ARGS% -m pip install -e .
 )
 
-"%PYTHON_EXE%" %PYTHON_ARGS% -m xrd_atlas.quick_export %*
+"%PYTHON_EXE%" %PYTHON_ARGS% -m cif2peaks.quick_export %*
 set "EXIT_CODE=%ERRORLEVEL%"
 
 echo.
 if "%EXIT_CODE%"=="0" (
     echo Done. The Excel file was saved next to the first CIF file.
 ) else (
-    echo Quick export failed. You can still use start_xrd_atlas.bat for the GUI workflow.
+    echo Quick export failed. You can still use start_cif2peaks.bat for the GUI workflow.
 )
 pause
 exit /b %EXIT_CODE%

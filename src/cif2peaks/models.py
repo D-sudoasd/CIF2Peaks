@@ -96,7 +96,7 @@ class XRDResult:
 
 
 @dataclass
-class XrdAtlasSettings:
+class Cif2PeaksSettings:
     input_mode: XrayInputMode = "source"
     source_preset: str = "Cu Ka"
     wavelength_A: float = 1.5406
@@ -159,7 +159,7 @@ class ExperimentalPattern:
 
 
 @dataclass(frozen=True)
-class XrdAtlasPeakRow:
+class Cif2PeaksPeakRow:
     phase_name: str
     cif_name: str
     h: int
@@ -178,7 +178,7 @@ class XrdAtlasPeakRow:
 
 
 @dataclass
-class XrdAtlasExportPayload:
+class Cif2PeaksExportPayload:
     phases: list[XrdPhase]
-    settings: XrdAtlasSettings
+    settings: Cif2PeaksSettings
     experimental_patterns: list[ExperimentalPattern] = field(default_factory=list)

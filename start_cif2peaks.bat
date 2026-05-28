@@ -24,7 +24,7 @@ if not defined PYTHON_EXE (
 if not defined PYTHON_EXE (
     echo Python 3.11 or newer with Tcl/Tk was not found.
     echo Install or repair Python 3.11+, then run this file again.
-    echo You can also use dist\XRD Atlas\XRD Atlas.exe if it has been built.
+    echo You can also use dist\CIF2Peaks\CIF2Peaks.exe if it has been built.
     pause
     exit /b 1
 )
@@ -32,29 +32,29 @@ if not defined PYTHON_EXE (
 set "PYTHONUTF8=1"
 set "PYTHONPATH=%CD%\src;%PYTHONPATH%"
 
-"%PYTHON_EXE%" %PYTHON_ARGS% -c "import xrd_atlas.gui" >nul 2>nul
+"%PYTHON_EXE%" %PYTHON_ARGS% -c "import cif2peaks.gui" >nul 2>nul
 if errorlevel 1 (
-    echo Installing XRD Atlas dependencies. Please wait...
+    echo Installing CIF2Peaks dependencies. Please wait...
     "%PYTHON_EXE%" %PYTHON_ARGS% -m pip install -e .
 )
 
-"%PYTHON_EXE%" %PYTHON_ARGS% -c "import xrd_atlas.gui" >nul 2>nul
+"%PYTHON_EXE%" %PYTHON_ARGS% -c "import cif2peaks.gui" >nul 2>nul
 if errorlevel 1 (
     echo.
-    echo XRD Atlas dependencies are still not available.
+    echo CIF2Peaks dependencies are still not available.
     echo Try this command in PowerShell:
     echo   "%PYTHON_EXE%" %PYTHON_ARGS% -m pip install -e .
     pause
     exit /b 1
 )
 
-"%PYTHON_EXE%" %PYTHON_ARGS% -m xrd_atlas.gui %*
+"%PYTHON_EXE%" %PYTHON_ARGS% -m cif2peaks.gui %*
 set "EXIT_CODE=%ERRORLEVEL%"
 
 if not "%EXIT_CODE%"=="0" (
     echo.
-    echo XRD Atlas failed to start.
-    echo Try repairing Python Tcl/Tk, or use dist\XRD Atlas\XRD Atlas.exe.
+    echo CIF2Peaks failed to start.
+    echo Try repairing Python Tcl/Tk, or use dist\CIF2Peaks\CIF2Peaks.exe.
     pause
 )
 

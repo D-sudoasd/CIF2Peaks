@@ -66,7 +66,7 @@ echo Building standalone Windows app...
     --noconfirm ^
     --clean ^
     --windowed ^
-    --name "XRD Atlas" ^
+    --name "CIF2Peaks" ^
     --additional-hooks-dir scripts\pyinstaller_hooks ^
     --exclude-module pytest ^
     --exclude-module numpy.tests ^
@@ -86,7 +86,7 @@ echo Building standalone Windows app...
     --hidden-import tkinter ^
     --hidden-import tkinterdnd2 ^
     --hidden-import _tkinter ^
-    scripts\xrd_atlas_windows.py
+    scripts\cif2peaks_windows.py
 
 if errorlevel 1 (
     echo.
@@ -101,7 +101,7 @@ echo Building standalone quick export app...
     --noconfirm ^
     --clean ^
     --windowed ^
-    --name "XRD Atlas Quick Export" ^
+    --name "CIF2Peaks Quick Export" ^
     --additional-hooks-dir scripts\pyinstaller_hooks ^
     --exclude-module pytest ^
     --exclude-module numpy.tests ^
@@ -121,7 +121,7 @@ echo Building standalone quick export app...
     --hidden-import tkinter ^
     --hidden-import tkinterdnd2 ^
     --hidden-import _tkinter ^
-    scripts\xrd_atlas_quick_export_windows.py
+    scripts\cif2peaks_quick_export_windows.py
 
 if errorlevel 1 (
     echo.
@@ -130,20 +130,20 @@ if errorlevel 1 (
     exit /b 1
 )
 
-if exist "dist\XRD Atlas Quick Export\XRD Atlas Quick Export.exe" (
-    copy /Y "dist\XRD Atlas Quick Export\XRD Atlas Quick Export.exe" "dist\XRD Atlas\XRD Atlas Quick Export.exe" >nul
+if exist "dist\CIF2Peaks Quick Export\CIF2Peaks Quick Export.exe" (
+    copy /Y "dist\CIF2Peaks Quick Export\CIF2Peaks Quick Export.exe" "dist\CIF2Peaks\CIF2Peaks Quick Export.exe" >nul
 )
 
 echo.
 echo Adding portable user files...
-copy /Y "README_WINDOWS.txt" "dist\XRD Atlas\README_WINDOWS.txt" >nul
-copy /Y "windows_self_test.bat" "dist\XRD Atlas\windows_self_test.bat" >nul
-if not exist "dist\XRD Atlas\examples\cif" mkdir "dist\XRD Atlas\examples\cif"
-xcopy /Y /I "examples\cif\*.cif" "dist\XRD Atlas\examples\cif\" >nul
+copy /Y "README_WINDOWS.txt" "dist\CIF2Peaks\README_WINDOWS.txt" >nul
+copy /Y "windows_self_test.bat" "dist\CIF2Peaks\windows_self_test.bat" >nul
+if not exist "dist\CIF2Peaks\examples\cif" mkdir "dist\CIF2Peaks\examples\cif"
+xcopy /Y /I "examples\cif\*.cif" "dist\CIF2Peaks\examples\cif\" >nul
 
 echo.
 echo Creating portable zip...
-"%PYTHON_EXE%" %PYTHON_ARGS% scripts\package_windows_portable.py "dist\XRD Atlas" "dist\XRD_Atlas_Windows_Portable.zip"
+"%PYTHON_EXE%" %PYTHON_ARGS% scripts\package_windows_portable.py "dist\CIF2Peaks" "dist\CIF2Peaks_Windows_Portable.zip"
 if errorlevel 1 (
     echo.
     echo Portable zip packaging failed.
@@ -153,10 +153,10 @@ if errorlevel 1 (
 
 echo.
 echo Build complete:
-echo   dist\XRD Atlas\XRD Atlas.exe
-echo   dist\XRD Atlas\XRD Atlas Quick Export.exe
-echo   dist\XRD Atlas\windows_self_test.bat
-echo   dist\XRD_Atlas_Windows_Portable.zip
+echo   dist\CIF2Peaks\CIF2Peaks.exe
+echo   dist\CIF2Peaks\CIF2Peaks Quick Export.exe
+echo   dist\CIF2Peaks\windows_self_test.bat
+echo   dist\CIF2Peaks_Windows_Portable.zip
 echo.
-echo Send "dist\XRD_Atlas_Windows_Portable.zip" to another Windows computer, unzip it, then run windows_self_test.bat.
+echo Send "dist\CIF2Peaks_Windows_Portable.zip" to another Windows computer, unzip it, then run windows_self_test.bat.
 pause

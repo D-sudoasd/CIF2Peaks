@@ -7,7 +7,7 @@ import numpy as np
 
 from .constants import DEFAULT_XRD_WAVELENGTH_A, X_RAY_ENERGY_WAVELENGTH_KEV_A
 from .hkl import split_hkl_components
-from .models import XRDPeakRecord, XRDRequest, XrdAtlasPeakRow, XrdAtlasSettings, XrdPhase
+from .models import XRDPeakRecord, XRDRequest, Cif2PeaksPeakRow, Cif2PeaksSettings, XrdPhase
 from .structure import load_crystal_model
 from .xrd import XRDService
 
@@ -16,7 +16,7 @@ CU_KA_WAVELENGTH_A = DEFAULT_XRD_WAVELENGTH_A
 
 
 @dataclass
-class XrdAtlasService:
+class Cif2PeaksService:
     xrd_service: XRDService
 
     def __init__(self) -> None:
@@ -48,7 +48,7 @@ class XrdAtlasService:
                 )
         return phases
 
-    def build_request(self, phase: XrdPhase, settings: XrdAtlasSettings) -> XRDRequest:
+    def build_request(self, phase: XrdPhase, settings: Cif2PeaksSettings) -> XRDRequest:
         return XRDRequest(
             cif_path=phase.cif_path,
             input_mode=settings.input_mode,
@@ -64,7 +64,7 @@ class XrdAtlasService:
             show_sticks=settings.show_sticks,
         )
 
-    def simulate_phase(self, phase: XrdPhase, settings: XrdAtlasSettings) -> XrdPhase:
+    def simulate_phase(self, phase: XrdPhase, settings: Cif2PeaksSettings) -> XrdPhase:
         request = self.build_request(phase, settings)
         crystal = load_crystal_model(request.cif_path)
         result = self.xrd_service.simulate(crystal, request)
@@ -73,7 +73,7 @@ class XrdAtlasService:
         phase.error = None
         return phase
 
-    def simulate_phases(self, phases: list[XrdPhase], settings: XrdAtlasSettings) -> list[XrdPhase]:
+    def simulate_phases(self, phases: list[XrdPhase], settings: Cif2PeaksSettings) -> list[XrdPhase]:
         for phase in phases:
             if not phase.enabled or phase.crystal is None:
                 continue
@@ -94,9 +94,9 @@ def two_theta_for_wavelength(d_spacing_A: float, wavelength_A: float) -> float |
     return float(np.rad2deg(2.0 * np.arcsin(argument)))
 
 
-def peak_to_atlas_row(phase: XrdPhase, peak: XRDPeakRecord) -> XrdAtlasPeakRow:
+def peak_to_cif2peaks_row(phase: XrdPhase, peak: XRDPeakRecord) -> Cif2PeaksPeakRow:
     h, k, i, l = split_hkl_components(peak.hkl)
-    return XrdAtlasPeakRow(
+    return Cif2PeaksPeakRow(
         phase_name=phase.phase_name,
         cif_name=phase.cif_path.name,
         h=h,
@@ -115,7 +115,7 @@ def peak_to_atlas_row(phase: XrdPhase, peak: XRDPeakRecord) -> XrdAtlasPeakRow:
     )
 
 
-def phase_peak_rows(phase: XrdPhase) -> list[XrdAtlasPeakRow]:
+def phase_peak_rows(phase: XrdPhase) -> list[Cif2PeaksPeakRow]:
     if phase.result is None:
         return []
-    return [peak_to_atlas_row(phase, peak) for peak in phase.result.peaks]
+    return [peak_to_cif2peaks_row(phase, peak) for peak in phase.result.peaks]

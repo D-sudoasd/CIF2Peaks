@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import os
 
-from xrd_atlas.gui import main
+from cif2peaks.gui import main
 
 
 if __name__ == "__main__":
