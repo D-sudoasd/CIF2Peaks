@@ -6,7 +6,7 @@ import os
 from pathlib import Path
 import sys
 from collections.abc import Callable
-from typing import Sequence
+from typing import Mapping, Sequence
 
 from .constants import DEFAULT_XRD_SOURCE, X_RAY_ENERGY_WAVELENGTH_KEV_A
 from .exporters import export_cif2peaks_workbook
@@ -35,6 +35,142 @@ class GuiCifInputUpdate:
     ignored_count: int
 
 
+SUPPORTED_GUI_LANGUAGES = ("zh", "en")
+APP_DISPLAY_NAME = "CIF2peaks"
+DEVELOPER_CREDIT = "Developed by Dr. GONG Delun"
+GUI_TEXT = {
+    "zh": {
+        "window_title": "CIF2peaks - CIF 转 Excel",
+        "app_title": "CIF2peaks 一键导出",
+        "app_subtitle": "把 CIF 晶体结构批量转换为理论粉末 XRD 峰表，结果可直接用 Excel、Origin 或 Python 继续处理。",
+        "developer_credit": DEVELOPER_CREDIT,
+        "toggle_language": "English",
+        "files_panel": "1. 添加 CIF 文件并命名",
+        "display_name_label": "选中 CIF 显示名",
+        "apply_display_name": "应用名称",
+        "reset_display_name": "使用文件名",
+        "add_files": "添加文件",
+        "add_folder": "添加文件夹",
+        "remove_selected": "移除选中",
+        "clear_files": "清空",
+        "settings_panel": "2. 保存位置和 X 射线参数",
+        "output_file": "结果文件",
+        "choose_output": "另存为",
+        "xray_preset": "X 射线预设",
+        "manual_energy": "手动能量 keV",
+        "d_range": "d 范围",
+        "settings_hint": "手动能量非空时优先生效；留空则使用上方预设。",
+        "preview_panel": "3. CIF 预览 / 导出结果",
+        "tree_display_name": "显示名",
+        "tree_formula": "化学式",
+        "tree_space_group": "空间群",
+        "tree_status": "状态 / 峰数",
+        "tree_warning": "错误 / 警告",
+        "export_excel": "导出 Excel",
+        "open_excel": "打开 Excel",
+        "no_cif": "尚未添加 CIF 文件",
+        "cif_count": "已添加 {count} 个 CIF 文件",
+        "drop_hint_available": "可直接把 CIF 文件或文件夹拖到这里。",
+        "drop_hint_unavailable": "当前环境未启用窗口拖放；请使用“添加文件”或把 CIF 拖到 EXE 图标上启动。",
+        "ready_to_add": "准备就绪：添加 CIF 文件后，直接点击“导出 Excel”。",
+        "ready_to_export": "可以导出：确认保存位置后点击“导出 Excel”。",
+        "reading_cif": "正在读取 CIF 基本信息...",
+        "recognized_with_failures": "已识别 {ready} 个 CIF；{failed} 个无法读取，仍可导出其它可用文件。",
+        "recognized_ready": "已识别 {ready} 个 CIF：确认保存位置后点击“导出 Excel”。",
+        "add_source": "{source}：新增 {added} 个 CIF{suffix}。",
+        "add_source_none": "{source}：没有新增 CIF，已忽略 {ignored} 项。",
+        "ignored_suffix": "，忽略 {ignored} 项",
+        "source_add_files": "添加文件",
+        "source_add_folder": "添加文件夹",
+        "source_drop": "拖入文件",
+        "choose_cif_title": "选择 CIF 文件",
+        "choose_folder_title": "选择包含 CIF 文件的文件夹",
+        "save_output_title": "保存 Excel 结果",
+        "excel_filetype": "Excel workbook",
+        "energy_manual": "手动能量：{energy} keV",
+        "energy_preset": "预设：{preset}",
+        "unrestricted": "不限制",
+        "d_range_summary": "d {lower}-{upper} Å",
+        "d_unrestricted_summary": "d: 不限制",
+        "settings_summary": "{source}，{range}",
+        "to_text": " 到 ",
+        "angstrom": " Å",
+        "exporting": "正在计算 XRD 峰表并写入 Excel，请稍候...",
+        "export_failed_status": "导出失败。",
+        "export_failed_title": "导出失败",
+        "export_done_title": "导出完成",
+        "drop_unavailable_short": "当前窗口拖放不可用；请使用“添加文件”或把 CIF 拖到 EXE 图标上启动。",
+        "preview_pending": "待导出",
+        "preview_failed": "无法读取",
+        "default_output_name": "CIF2Peaks峰表.xlsx",
+    },
+    "en": {
+        "window_title": "CIF2peaks - CIF to Excel",
+        "app_title": "CIF2peaks quick export",
+        "app_subtitle": "Convert CIF crystal structures into theoretical powder XRD peak tables for Excel, Origin, or Python.",
+        "developer_credit": DEVELOPER_CREDIT,
+        "toggle_language": "中文",
+        "files_panel": "1. Add and name CIF files",
+        "display_name_label": "Selected CIF display name",
+        "apply_display_name": "Apply name",
+        "reset_display_name": "Use file name",
+        "add_files": "Add files",
+        "add_folder": "Add folder",
+        "remove_selected": "Remove selected",
+        "clear_files": "Clear",
+        "settings_panel": "2. Output and X-ray settings",
+        "output_file": "Output file",
+        "choose_output": "Browse",
+        "xray_preset": "X-ray preset",
+        "manual_energy": "Manual energy keV",
+        "d_range": "d range",
+        "settings_hint": "Manual energy takes priority when filled; leave it blank to use the preset.",
+        "preview_panel": "3. CIF preview / export result",
+        "tree_display_name": "Display name",
+        "tree_formula": "Formula",
+        "tree_space_group": "Space group",
+        "tree_status": "Status / peaks",
+        "tree_warning": "Error / warning",
+        "export_excel": "Export Excel",
+        "open_excel": "Open Excel",
+        "no_cif": "No CIF files added",
+        "cif_count": "{count} CIF file(s) added",
+        "drop_hint_available": "You can drop CIF files or folders here.",
+        "drop_hint_unavailable": "Window drag-and-drop is unavailable; use Add files or launch by dropping CIFs onto the EXE.",
+        "ready_to_add": "Ready: add CIF files, then click Export Excel.",
+        "ready_to_export": "Ready to export: confirm the output path, then click Export Excel.",
+        "reading_cif": "Reading CIF metadata...",
+        "recognized_with_failures": "Recognized {ready} CIF file(s); {failed} could not be read, but usable files can still be exported.",
+        "recognized_ready": "Recognized {ready} CIF file(s): confirm the output path, then click Export Excel.",
+        "add_source": "{source}: added {added} CIF file(s){suffix}.",
+        "add_source_none": "{source}: no new CIF files; ignored {ignored} item(s).",
+        "ignored_suffix": ", ignored {ignored} item(s)",
+        "source_add_files": "Add files",
+        "source_add_folder": "Add folder",
+        "source_drop": "Drop",
+        "choose_cif_title": "Choose CIF files",
+        "choose_folder_title": "Choose a folder containing CIF files",
+        "save_output_title": "Save Excel result",
+        "excel_filetype": "Excel workbook",
+        "energy_manual": "Manual energy: {energy} keV",
+        "energy_preset": "Preset: {preset}",
+        "unrestricted": "unrestricted",
+        "d_range_summary": "d {lower}-{upper} Å",
+        "d_unrestricted_summary": "d: unrestricted",
+        "settings_summary": "{source}, {range}",
+        "to_text": " to ",
+        "angstrom": " Å",
+        "exporting": "Calculating XRD peaks and writing Excel. Please wait...",
+        "export_failed_status": "Export failed.",
+        "export_failed_title": "Export failed",
+        "export_done_title": "Export complete",
+        "drop_unavailable_short": "Window drag-and-drop is unavailable; use Add files or launch by dropping CIFs onto the EXE.",
+        "preview_pending": "Ready",
+        "preview_failed": "Cannot read",
+        "default_output_name": "CIF2Peaks_peak_table.xlsx",
+    },
+}
+
 GUI_XRAY_PRESET_LABELS = ["Cu Kα", "30 keV", "83 keV"]
 GUI_XRAY_PRESETS = {
     "Cu Kα": None,
@@ -42,6 +178,40 @@ GUI_XRAY_PRESETS = {
     "30 keV": 30.0,
     "83 keV": 83.0,
 }
+
+
+def _gui_text(language: str, key: str, **kwargs: object) -> str:
+    language_key = language if language in GUI_TEXT else "zh"
+    template = GUI_TEXT[language_key][key]
+    return template.format(**kwargs) if kwargs else template
+
+
+def _resolved_display_name_lookup(display_names: Mapping[str | Path, str] | None) -> dict[Path, str]:
+    if display_names is None:
+        return {}
+    lookup: dict[Path, str] = {}
+    for key, value in display_names.items():
+        try:
+            path = Path(key).expanduser().resolve()
+        except OSError:
+            continue
+        lookup[path] = str(value).strip()
+    return lookup
+
+
+def _display_name_for_path(path: Path, display_name_lookup: Mapping[Path, str]) -> str:
+    resolved = Path(path).expanduser().resolve()
+    return display_name_lookup.get(resolved, "").strip() or resolved.name
+
+
+def _apply_display_names_to_phases(
+    phases: Sequence[object],
+    display_names: Mapping[str | Path, str] | None,
+) -> None:
+    lookup = _resolved_display_name_lookup(display_names)
+    for phase in phases:
+        phase_path = getattr(phase, "cif_path")
+        setattr(phase, "phase_name", _display_name_for_path(phase_path, lookup))
 
 
 def _configure_tcl_tk_environment(python_base: str | Path | None = None) -> None:
@@ -285,24 +455,29 @@ def friendly_error_message(exc: Exception) -> str:
     return f"处理失败：{message}"
 
 
-def preview_simple_gui_inputs(cif_paths: Sequence[str | Path]) -> SimpleGuiPreviewResult:
+def preview_simple_gui_inputs(
+    cif_paths: Sequence[str | Path],
+    display_names: Mapping[str | Path, str] | None = None,
+    language: str = "zh",
+) -> SimpleGuiPreviewResult:
     resolved_cifs = initial_gui_cif_paths(cif_paths)
     service = Cif2PeaksService()
     phases = service.load_phases(resolved_cifs)
+    _apply_display_names_to_phases(phases, display_names)
 
     phase_rows: list[tuple[str, str, str, str, str]] = []
     ready_count = 0
     failed_count = 0
     for phase in phases:
         if phase.error:
-            status = "无法读取"
+            status = _gui_text(language, "preview_failed")
             failed_count += 1
         else:
-            status = "待导出"
+            status = _gui_text(language, "preview_pending")
             ready_count += 1
         phase_rows.append(
             (
-                phase.cif_path.name,
+                phase.phase_name,
                 phase.display_formula,
                 phase.display_space_group,
                 status,
@@ -327,6 +502,7 @@ def run_simple_gui_export(
     two_theta_max: str | float = 180.0,
     d_min_A: str | float | None = None,
     d_max_A: str | float | None = None,
+    display_names: Mapping[str | Path, str] | None = None,
 ) -> SimpleGuiExportResult:
     resolved_cifs = [Path(path).expanduser().resolve() for path in cif_paths]
     if not resolved_cifs:
@@ -341,6 +517,7 @@ def run_simple_gui_export(
         settings = build_beginner_gui_settings(two_theta_min, two_theta_max, energy_keV, xray_preset)
     service = Cif2PeaksService()
     phases = service.load_phases(resolved_cifs)
+    _apply_display_names_to_phases(phases, display_names)
     service.simulate_phases(phases, settings)
 
     output = normalize_xlsx_output_path(output_path)
@@ -352,7 +529,7 @@ def run_simple_gui_export(
         peak_count = 0 if phase.result is None else len(phase.result.peaks)
         phase_rows.append(
             (
-                phase.cif_path.name,
+                phase.phase_name,
                 phase.display_formula,
                 phase.display_space_group,
                 peak_count,
@@ -366,9 +543,17 @@ def run_simple_gui_export(
     )
 
 
-def simple_export_message_lines(result: SimpleGuiExportResult) -> list[str]:
+def simple_export_message_lines(result: SimpleGuiExportResult, language: str = "zh") -> list[str]:
     if result.total_peaks:
-        summary_lines = [f"已导出 {result.total_peaks} 条峰记录。"]
+        if language == "en":
+            summary_lines = [f"Exported {result.total_peaks} peak record(s)."]
+        else:
+            summary_lines = [f"已导出 {result.total_peaks} 条峰记录。"]
+    elif language == "en":
+        summary_lines = [
+            "No usable peak records were produced, but a diagnostic Excel workbook was generated.",
+            "Open Summary and User Guide to inspect CIF issues.",
+        ]
     else:
         summary_lines = [
             "未得到可用峰记录，但已生成诊断 Excel。",
@@ -377,12 +562,18 @@ def simple_export_message_lines(result: SimpleGuiExportResult) -> list[str]:
     return [*summary_lines, "", str(result.output_path)]
 
 
-def gui_export_completion_text(result: SimpleGuiExportResult) -> tuple[str, str]:
+def gui_export_completion_text(result: SimpleGuiExportResult, language: str = "zh") -> tuple[str, str]:
     if result.total_peaks:
-        status_text = f"完成：已导出 {result.total_peaks} 条峰记录。"
+        status_text = (
+            f"Done: exported {result.total_peaks} peak record(s)."
+            if language == "en"
+            else f"完成：已导出 {result.total_peaks} 条峰记录。"
+        )
+    elif language == "en":
+        status_text = "Done: generated a diagnostic Excel workbook; no usable peak records."
     else:
         status_text = "完成：已生成诊断 Excel；未得到可用峰记录。"
-    return status_text, "\n".join(simple_export_message_lines(result))
+    return status_text, "\n".join(simple_export_message_lines(result, language))
 
 
 def open_export_result(output_path: str | Path, opener: Callable[[str], object] | None = None) -> Path:
@@ -414,43 +605,62 @@ def _launch_tk_app(initial_paths: Sequence[str | Path] = ()) -> None:
         dnd_available = False
     if os.environ.get("CIF2PEAKS_SMOKE_TEST") == "1":
         root.after(300, root.destroy)
-    root.title("CIF2Peaks - CIF 转 Excel")
-    root.geometry("1040x700")
-    root.minsize(900, 620)
+    root.geometry("1120x740")
+    root.minsize(980, 660)
 
     style = ttk.Style(root)
     try:
         style.theme_use("clam")
     except tk.TclError:
         pass
+    surface_color = "#f5f7fb"
+    panel_color = "#ffffff"
+    accent_color = "#2563eb"
+    root.configure(background=surface_color)
+    style.configure(".", font=("Microsoft YaHei UI", 10))
+    style.configure("TFrame", background=surface_color)
+    style.configure("Card.TFrame", background=panel_color)
+    style.configure("TLabelframe", background=panel_color, bordercolor="#d8dee9", relief="solid")
+    style.configure("TLabelframe.Label", background=surface_color, foreground="#182235")
+    style.configure("TLabel", background=surface_color, foreground="#182235")
     style.configure("Title.TLabel", font=("Microsoft YaHei UI", 18, "bold"))
-    style.configure("Subtitle.TLabel", font=("Microsoft YaHei UI", 10))
+    style.configure("Subtitle.TLabel", font=("Microsoft YaHei UI", 10), foreground="#516070")
+    style.configure("Credit.TLabel", font=("Microsoft YaHei UI", 9), foreground="#6b7280")
     style.configure("Step.TLabelframe.Label", font=("Microsoft YaHei UI", 11, "bold"))
-    style.configure("Primary.TButton", font=("Microsoft YaHei UI", 12, "bold"), padding=(18, 10))
+    style.configure("Primary.TButton", font=("Microsoft YaHei UI", 12, "bold"), padding=(18, 10), foreground="#ffffff")
+    style.map("Primary.TButton", background=[("active", "#1d4ed8"), ("!disabled", accent_color)])
     style.configure("Action.TButton", padding=(10, 6))
+    style.configure("Treeview.Heading", font=("Microsoft YaHei UI", 10, "bold"))
+    style.configure("Treeview", rowheight=25)
 
     selected_paths: list[Path] = initial_gui_cif_paths(initial_paths)
+    display_names: dict[Path, str] = {path: path.name for path in selected_paths}
     last_output_path: Path | None = None
     preview_generation = 0
+    language_var = tk.StringVar(value="zh")
+    display_name_var = tk.StringVar(value="")
     xray_preset_var = tk.StringVar(value=GUI_XRAY_PRESET_LABELS[0])
     energy_var = tk.StringVar(value="")
     min_var = tk.StringVar(value="")
     max_var = tk.StringVar(value="")
     output_var = tk.StringVar(value=str(suggest_output_path(selected_paths)))
+    lang = language_var.get
     status_var = tk.StringVar(
-        value="可以导出：确认保存位置后点击“导出 Excel”。"
+        value=_gui_text(lang(), "ready_to_export")
         if selected_paths
-        else "准备就绪：添加 CIF 文件后，直接点击“导出 Excel”。"
+        else _gui_text(lang(), "ready_to_add")
     )
     input_summary_var = tk.StringVar(
-        value="尚未添加 CIF 文件" if not selected_paths else f"已添加 {len(selected_paths)} 个 CIF 文件"
+        value=_gui_text(lang(), "no_cif")
+        if not selected_paths
+        else _gui_text(lang(), "cif_count", count=len(selected_paths))
     )
     drop_hint_var = tk.StringVar(
-        value="可直接把 CIF 文件或文件夹拖到这里。"
+        value=_gui_text(lang(), "drop_hint_available")
         if dnd_available
-        else "当前环境未启用窗口拖放；请使用“添加文件”或把 CIF 拖到 EXE 图标上启动。"
+        else _gui_text(lang(), "drop_hint_unavailable")
     )
-    settings_summary_var = tk.StringVar(value="X 射线：Cu Kα，d: 不限制")
+    settings_summary_var = tk.StringVar()
 
     root.columnconfigure(0, weight=1)
     root.rowconfigure(1, weight=1)
@@ -458,17 +668,19 @@ def _launch_tk_app(initial_paths: Sequence[str | Path] = ()) -> None:
     header = ttk.Frame(root, padding=(18, 16, 18, 8))
     header.grid(row=0, column=0, sticky="ew")
     header.columnconfigure(0, weight=1)
-    ttk.Label(header, text="CIF2Peaks 一键导出", style="Title.TLabel").grid(row=0, column=0, sticky="w")
-    ttk.Label(
-        header,
-        text="把 CIF 晶体结构批量转换为理论粉末 XRD 峰表，结果可直接用 Excel、Origin 或 Python 继续处理。",
-        style="Subtitle.TLabel",
-    ).grid(
+    title_label = ttk.Label(header, style="Title.TLabel")
+    title_label.grid(row=0, column=0, sticky="w")
+    language_button = ttk.Button(header, style="Action.TButton")
+    language_button.grid(row=0, column=1, sticky="e")
+    subtitle_label = ttk.Label(header, style="Subtitle.TLabel")
+    subtitle_label.grid(
         row=1,
         column=0,
         sticky="w",
         pady=(4, 0),
     )
+    credit_label = ttk.Label(header, style="Credit.TLabel")
+    credit_label.grid(row=2, column=0, sticky="w", pady=(4, 0))
 
     main = ttk.Frame(root, padding=(18, 8, 18, 10))
     main.grid(row=1, column=0, sticky="nsew")
@@ -477,10 +689,10 @@ def _launch_tk_app(initial_paths: Sequence[str | Path] = ()) -> None:
     main.rowconfigure(0, weight=1)
     main.rowconfigure(1, weight=1)
 
-    files_panel = ttk.LabelFrame(main, text="1. 添加 CIF 文件", padding=12, style="Step.TLabelframe")
+    files_panel = ttk.LabelFrame(main, padding=12, style="Step.TLabelframe")
     files_panel.grid(row=0, column=0, rowspan=2, sticky="nsew", padx=(0, 10))
     files_panel.columnconfigure(0, weight=1)
-    files_panel.rowconfigure(3, weight=1)
+    files_panel.rowconfigure(4, weight=1)
 
     file_buttons = ttk.Frame(files_panel)
     file_buttons.grid(row=0, column=0, sticky="ew", pady=(0, 8))
@@ -489,46 +701,65 @@ def _launch_tk_app(initial_paths: Sequence[str | Path] = ()) -> None:
     ttk.Label(files_panel, textvariable=input_summary_var).grid(row=1, column=0, sticky="w")
     ttk.Label(files_panel, textvariable=drop_hint_var, style="Subtitle.TLabel").grid(row=2, column=0, sticky="w", pady=(2, 8))
 
+    display_name_frame = ttk.Frame(files_panel)
+    display_name_frame.grid(row=3, column=0, columnspan=2, sticky="ew", pady=(0, 8))
+    display_name_frame.columnconfigure(1, weight=1)
+    display_name_label = ttk.Label(display_name_frame)
+    display_name_label.grid(row=0, column=0, sticky="w", padx=(0, 8))
+    display_name_entry = ttk.Entry(display_name_frame, textvariable=display_name_var)
+    display_name_entry.grid(row=0, column=1, sticky="ew", padx=(0, 6))
+    apply_name_button = ttk.Button(display_name_frame, style="Action.TButton")
+    apply_name_button.grid(row=0, column=2, padx=(0, 6))
+    reset_name_button = ttk.Button(display_name_frame, style="Action.TButton")
+    reset_name_button.grid(row=0, column=3)
+
     listbox = tk.Listbox(files_panel, height=14, selectmode=tk.EXTENDED)
-    listbox.grid(row=3, column=0, sticky="nsew")
+    listbox.grid(row=4, column=0, sticky="nsew")
     scrollbar = ttk.Scrollbar(files_panel, orient="vertical", command=listbox.yview)
-    scrollbar.grid(row=3, column=1, sticky="ns")
+    scrollbar.grid(row=4, column=1, sticky="ns")
     listbox.configure(yscrollcommand=scrollbar.set)
 
     def refresh_list() -> None:
         listbox.delete(0, tk.END)
         for path in selected_paths:
-            listbox.insert(tk.END, path.name)
+            display_name = display_names.get(path, path.name).strip() or path.name
+            label = display_name if display_name == path.name else f"{display_name}  ({path.name})"
+            listbox.insert(tk.END, label)
         count = len(selected_paths)
-        input_summary_var.set("尚未添加 CIF 文件" if count == 0 else f"已添加 {count} 个 CIF 文件")
+        input_summary_var.set(_gui_text(lang(), "no_cif") if count == 0 else _gui_text(lang(), "cif_count", count=count))
         output_var.set(str(suggest_output_path(selected_paths)))
         export_button.configure(state=tk.NORMAL if selected_paths else tk.DISABLED)
-        status_var.set("可以导出：确认保存位置后点击“导出 Excel”。" if selected_paths else "准备就绪：添加 CIF 文件后，直接点击“导出 Excel”。")
+        status_var.set(_gui_text(lang(), "ready_to_export") if selected_paths else _gui_text(lang(), "ready_to_add"))
+        sync_display_name_entry()
         schedule_preview()
 
     def add_inputs(inputs: Sequence[str | Path], source_label: str) -> GuiCifInputUpdate:
         update = add_gui_cif_inputs(selected_paths, inputs)
+        for path in selected_paths:
+            display_names.setdefault(path, path.name)
         refresh_list()
         if update.added_count:
-            suffix = f"，忽略 {update.ignored_count} 项" if update.ignored_count else ""
-            status_var.set(f"{source_label}：新增 {update.added_count} 个 CIF{suffix}。")
+            suffix = _gui_text(lang(), "ignored_suffix", ignored=update.ignored_count) if update.ignored_count else ""
+            status_var.set(_gui_text(lang(), "add_source", source=source_label, added=update.added_count, suffix=suffix))
         elif update.ignored_count:
-            status_var.set(f"{source_label}：没有新增 CIF，已忽略 {update.ignored_count} 项。")
+            status_var.set(_gui_text(lang(), "add_source_none", source=source_label, ignored=update.ignored_count))
         return update
 
     def add_files() -> None:
-        paths = filedialog.askopenfilenames(title="选择 CIF 文件", filetypes=[("CIF files", "*.cif")])
+        paths = filedialog.askopenfilenames(title=_gui_text(lang(), "choose_cif_title"), filetypes=[("CIF files", "*.cif")])
         if paths:
-            add_inputs(paths, "添加文件")
+            add_inputs(paths, _gui_text(lang(), "source_add_files"))
 
     def add_folder() -> None:
-        folder = filedialog.askdirectory(title="选择包含 CIF 文件的文件夹")
+        folder = filedialog.askdirectory(title=_gui_text(lang(), "choose_folder_title"))
         if not folder:
             return
-        add_inputs([folder], "添加文件夹")
+        add_inputs([folder], _gui_text(lang(), "source_add_folder"))
 
     def clear_files() -> None:
         selected_paths.clear()
+        display_names.clear()
+        display_name_var.set("")
         tree.delete(*tree.get_children())
         refresh_list()
 
@@ -536,20 +767,61 @@ def _launch_tk_app(initial_paths: Sequence[str | Path] = ()) -> None:
         selected = set(listbox.curselection())
         if not selected:
             return
+        for index, path in enumerate(selected_paths):
+            if index in selected:
+                display_names.pop(path, None)
         selected_paths[:] = [path for index, path in enumerate(selected_paths) if index not in selected]
         refresh_list()
 
-    ttk.Button(file_buttons, text="添加文件", command=add_files, style="Action.TButton").grid(row=0, column=0, padx=(0, 6))
-    ttk.Button(file_buttons, text="添加文件夹", command=add_folder, style="Action.TButton").grid(row=0, column=1, padx=(0, 6))
-    ttk.Button(file_buttons, text="移除选中", command=remove_selected, style="Action.TButton").grid(row=0, column=2, padx=(0, 6))
-    ttk.Button(file_buttons, text="清空", command=clear_files, style="Action.TButton").grid(row=0, column=3, sticky="w")
+    def selected_display_path() -> Path | None:
+        selection = listbox.curselection()
+        if not selection:
+            return None
+        index = int(selection[0])
+        if index < 0 or index >= len(selected_paths):
+            return None
+        return selected_paths[index]
 
-    settings_panel = ttk.LabelFrame(main, text="2. 保存位置和 X 射线参数", padding=12, style="Step.TLabelframe")
+    def sync_display_name_entry() -> None:
+        path = selected_display_path()
+        display_name_var.set("" if path is None else display_names.get(path, path.name))
+
+    def apply_display_name() -> None:
+        path = selected_display_path()
+        if path is None:
+            return
+        display_names[path] = display_name_var.get().strip() or path.name
+        refresh_list()
+
+    def reset_display_name() -> None:
+        path = selected_display_path()
+        if path is None:
+            return
+        display_names[path] = path.name
+        refresh_list()
+
+    listbox.bind("<<ListboxSelect>>", lambda _event: sync_display_name_entry())
+    listbox.bind("<Double-Button-1>", lambda _event: display_name_entry.focus_set())
+    display_name_entry.bind("<Return>", lambda _event: apply_display_name())
+
+    add_files_button = ttk.Button(file_buttons, command=add_files, style="Action.TButton")
+    add_files_button.grid(row=0, column=0, padx=(0, 6))
+    add_folder_button = ttk.Button(file_buttons, command=add_folder, style="Action.TButton")
+    add_folder_button.grid(row=0, column=1, padx=(0, 6))
+    remove_button = ttk.Button(file_buttons, command=remove_selected, style="Action.TButton")
+    remove_button.grid(row=0, column=2, padx=(0, 6))
+    clear_button = ttk.Button(file_buttons, command=clear_files, style="Action.TButton")
+    clear_button.grid(row=0, column=3, sticky="w")
+    apply_name_button.configure(command=apply_display_name)
+    reset_name_button.configure(command=reset_display_name)
+
+    settings_panel = ttk.LabelFrame(main, padding=12, style="Step.TLabelframe")
     settings_panel.grid(row=0, column=1, sticky="nsew", padx=(10, 0))
     settings_panel.columnconfigure(1, weight=1)
 
     ttk.Label(settings_panel, textvariable=settings_summary_var).grid(row=0, column=0, columnspan=2, sticky="w", pady=(0, 10))
-    ttk.Label(settings_panel, text="结果文件").grid(row=1, column=0, sticky="w", pady=4)
+    output_label = ttk.Label(settings_panel)
+    output_label.grid(row=1, column=0, sticky="w", pady=4)
 
     output_frame = ttk.Frame(settings_panel)
     output_frame.grid(row=1, column=1, sticky="ew", pady=4)
@@ -558,15 +830,16 @@ def _launch_tk_app(initial_paths: Sequence[str | Path] = ()) -> None:
 
     def choose_output() -> None:
         path = filedialog.asksaveasfilename(
-            title="保存 Excel 结果",
+            title=_gui_text(lang(), "save_output_title"),
             defaultextension=".xlsx",
-            filetypes=[("Excel workbook", "*.xlsx")],
-            initialfile=Path(output_var.get()).name or "CIF2Peaks峰表.xlsx",
+            filetypes=[(_gui_text(lang(), "excel_filetype"), "*.xlsx")],
+            initialfile=Path(output_var.get()).name or _gui_text(lang(), "default_output_name"),
         )
         if path:
             output_var.set(path)
 
-    ttk.Button(output_frame, text="另存为", command=choose_output, style="Action.TButton").grid(row=0, column=1)
+    choose_output_button = ttk.Button(output_frame, command=choose_output, style="Action.TButton")
+    choose_output_button.grid(row=0, column=1)
 
     def update_settings_summary() -> None:
         energy_text = energy_var.get().strip()
@@ -574,55 +847,57 @@ def _launch_tk_app(initial_paths: Sequence[str | Path] = ()) -> None:
         d_min_text = min_var.get().strip()
         d_max_text = max_var.get().strip()
         if energy_text:
-            source_text = f"手动能量：{energy_text} keV"
+            source_text = _gui_text(lang(), "energy_manual", energy=energy_text)
         else:
-            source_text = f"预设：{preset_text}"
+            source_text = _gui_text(lang(), "energy_preset", preset=preset_text)
         if d_min_text or d_max_text:
-            lower = d_min_text or "不限制"
-            upper = d_max_text or "不限制"
-            range_text = f"d {lower}-{upper} Å"
+            lower = d_min_text or _gui_text(lang(), "unrestricted")
+            upper = d_max_text or _gui_text(lang(), "unrestricted")
+            range_text = _gui_text(lang(), "d_range_summary", lower=lower, upper=upper)
         else:
-            range_text = "d: 不限制"
-        settings_summary_var.set(f"{source_text}，{range_text}")
+            range_text = _gui_text(lang(), "d_unrestricted_summary")
+        settings_summary_var.set(_gui_text(lang(), "settings_summary", source=source_text, range=range_text))
 
-    ttk.Label(settings_panel, text="X 射线预设").grid(row=2, column=0, sticky="w", pady=4)
+    xray_preset_label = ttk.Label(settings_panel)
+    xray_preset_label.grid(row=2, column=0, sticky="w", pady=4)
     preset_box = ttk.Combobox(settings_panel, textvariable=xray_preset_var, values=GUI_XRAY_PRESET_LABELS, state="readonly", width=12)
     preset_box.grid(row=2, column=1, sticky="w", pady=4)
-    ttk.Label(settings_panel, text="手动能量 keV").grid(row=3, column=0, sticky="w", pady=4)
+    manual_energy_label = ttk.Label(settings_panel)
+    manual_energy_label.grid(row=3, column=0, sticky="w", pady=4)
     ttk.Entry(settings_panel, textvariable=energy_var, width=12).grid(row=3, column=1, sticky="w", pady=4)
 
     range_frame = ttk.Frame(settings_panel)
     range_frame.grid(row=4, column=1, sticky="w", pady=4)
-    ttk.Label(settings_panel, text="d 范围").grid(row=4, column=0, sticky="w", pady=4)
+    d_range_label = ttk.Label(settings_panel)
+    d_range_label.grid(row=4, column=0, sticky="w", pady=4)
     ttk.Entry(range_frame, textvariable=min_var, width=8).grid(row=0, column=0, sticky="w")
-    ttk.Label(range_frame, text=" 到 ").grid(row=0, column=1)
+    d_range_to_label = ttk.Label(range_frame)
+    d_range_to_label.grid(row=0, column=1)
     ttk.Entry(range_frame, textvariable=max_var, width=8).grid(row=0, column=2, sticky="w")
-    ttk.Label(range_frame, text=" Å").grid(row=0, column=3, sticky="w")
-    ttk.Label(
-        settings_panel,
-        text="手动能量非空时优先生效；留空则使用上方预设。",
-        style="Subtitle.TLabel",
-    ).grid(row=5, column=0, columnspan=2, sticky="w", pady=(6, 0))
+    d_range_unit_label = ttk.Label(range_frame)
+    d_range_unit_label.grid(row=0, column=3, sticky="w")
+    settings_hint_label = ttk.Label(settings_panel, style="Subtitle.TLabel")
+    settings_hint_label.grid(row=5, column=0, columnspan=2, sticky="w", pady=(6, 0))
     xray_preset_var.trace_add("write", lambda *_: update_settings_summary())
     energy_var.trace_add("write", lambda *_: update_settings_summary())
     min_var.trace_add("write", lambda *_: update_settings_summary())
     max_var.trace_add("write", lambda *_: update_settings_summary())
 
-    preview_panel = ttk.LabelFrame(main, text="3. CIF 预览 / 导出结果", padding=12, style="Step.TLabelframe")
+    preview_panel = ttk.LabelFrame(main, padding=12, style="Step.TLabelframe")
     preview_panel.grid(row=1, column=1, sticky="nsew", padx=(10, 0), pady=(10, 0))
     preview_panel.columnconfigure(0, weight=1)
     preview_panel.rowconfigure(0, weight=1)
 
-    columns = ("cif", "formula", "space_group", "peaks", "warning")
+    columns = ("display_name", "formula", "space_group", "peaks", "warning")
     tree = ttk.Treeview(preview_panel, columns=columns, show="headings", height=9)
-    for column, label, width in (
-        ("cif", "CIF 文件", 180),
-        ("formula", "化学式", 90),
-        ("space_group", "空间群", 90),
-        ("peaks", "状态 / 峰数", 80),
-        ("warning", "错误 / 警告", 240),
+    for column, width in (
+        ("display_name", 190),
+        ("formula", 90),
+        ("space_group", 90),
+        ("peaks", 90),
+        ("warning", 240),
     ):
-        tree.heading(column, text=label)
+        tree.heading(column, text="")
         tree.column(column, width=width, anchor="w")
     tree.grid(row=0, column=0, sticky="nsew")
     tree_scroll = ttk.Scrollbar(preview_panel, orient="vertical", command=tree.yview)
@@ -633,10 +908,10 @@ def _launch_tk_app(initial_paths: Sequence[str | Path] = ()) -> None:
     footer.grid(row=2, column=0, sticky="ew")
     footer.columnconfigure(1, weight=1)
 
-    export_button = ttk.Button(footer, text="导出 Excel", style="Primary.TButton")
+    export_button = ttk.Button(footer, style="Primary.TButton")
     export_button.grid(row=0, column=0, sticky="w", padx=(0, 12))
     ttk.Label(footer, textvariable=status_var).grid(row=0, column=1, sticky="w")
-    open_button = ttk.Button(footer, text="打开 Excel", state=tk.DISABLED)
+    open_button = ttk.Button(footer, state=tk.DISABLED)
     open_button.grid(row=0, column=2, sticky="e")
 
     def set_busy(is_busy: bool) -> None:
@@ -651,10 +926,12 @@ def _launch_tk_app(initial_paths: Sequence[str | Path] = ()) -> None:
             return
 
         paths_snapshot = list(selected_paths)
-        status_var.set("正在读取 CIF 基本信息...")
+        display_names_snapshot = {path: display_names.get(path, path.name) for path in paths_snapshot}
+        language_snapshot = lang()
+        status_var.set(_gui_text(language_snapshot, "reading_cif"))
 
         def worker() -> None:
-            result = preview_simple_gui_inputs(paths_snapshot)
+            result = preview_simple_gui_inputs(paths_snapshot, display_names_snapshot, language_snapshot)
 
             def finish() -> None:
                 if generation != preview_generation:
@@ -664,11 +941,15 @@ def _launch_tk_app(initial_paths: Sequence[str | Path] = ()) -> None:
                     tree.insert("", tk.END, values=row)
                 if result.failed_count:
                     status_var.set(
-                        f"已识别 {result.ready_count} 个 CIF；{result.failed_count} 个无法读取，"
-                        "仍可导出其它可用文件。"
+                        _gui_text(
+                            lang(),
+                            "recognized_with_failures",
+                            ready=result.ready_count,
+                            failed=result.failed_count,
+                        )
                     )
                 else:
-                    status_var.set(f"已识别 {result.ready_count} 个 CIF：确认保存位置后点击“导出 Excel”。")
+                    status_var.set(_gui_text(lang(), "recognized_ready", ready=result.ready_count))
 
             root.after(0, finish)
 
@@ -678,26 +959,29 @@ def _launch_tk_app(initial_paths: Sequence[str | Path] = ()) -> None:
         nonlocal last_output_path
         set_busy(True)
         open_button.configure(state=tk.DISABLED)
-        status_var.set("正在计算 XRD 峰表并写入 Excel，请稍候...")
+        status_var.set(_gui_text(lang(), "exporting"))
         tree.delete(*tree.get_children())
+        paths_snapshot = list(selected_paths)
+        display_names_snapshot = {path: display_names.get(path, path.name) for path in paths_snapshot}
 
         def worker() -> None:
             try:
                 result = run_simple_gui_export(
-                    selected_paths,
+                    paths_snapshot,
                     output_var.get(),
                     energy_keV=energy_var.get(),
                     xray_preset=xray_preset_var.get(),
                     d_min_A=min_var.get(),
                     d_max_A=max_var.get(),
+                    display_names=display_names_snapshot,
                 )
             except Exception as exc:
                 root.after(
                     0,
                     lambda: (
                         set_busy(False),
-                        status_var.set("导出失败。"),
-                        messagebox.showerror("导出失败", friendly_error_message(exc)),
+                        status_var.set(_gui_text(lang(), "export_failed_status")),
+                        messagebox.showerror(_gui_text(lang(), "export_failed_title"), friendly_error_message(exc)),
                     ),
                 )
                 return
@@ -709,9 +993,9 @@ def _launch_tk_app(initial_paths: Sequence[str | Path] = ()) -> None:
                 last_output_path = result.output_path
                 set_busy(False)
                 open_button.configure(state=tk.NORMAL)
-                status_text, dialog_text = gui_export_completion_text(result)
+                status_text, dialog_text = gui_export_completion_text(result, lang())
                 status_var.set(status_text)
-                messagebox.showinfo("导出完成", dialog_text)
+                messagebox.showinfo(_gui_text(lang(), "export_done_title"), dialog_text)
 
             root.after(0, finish)
 
@@ -724,7 +1008,7 @@ def _launch_tk_app(initial_paths: Sequence[str | Path] = ()) -> None:
     def handle_drop(event: object) -> str:
         data = getattr(event, "data", "")
         dropped_paths = split_drop_event_paths(str(data), root.tk.splitlist)
-        add_inputs(dropped_paths, "拖入文件")
+        add_inputs(dropped_paths, _gui_text(lang(), "source_drop"))
         return "break"
 
     def register_drop_target(widget: object) -> None:
@@ -734,14 +1018,69 @@ def _launch_tk_app(initial_paths: Sequence[str | Path] = ()) -> None:
             widget.drop_target_register(DND_FILES)
             widget.dnd_bind("<<Drop>>", handle_drop)
         except Exception:
-            drop_hint_var.set("当前窗口拖放不可用；请使用“添加文件”或把 CIF 拖到 EXE 图标上启动。")
+            drop_hint_var.set(_gui_text(lang(), "drop_unavailable_short"))
+
+    def apply_language(refresh_preview: bool = False) -> None:
+        root.title(_gui_text(lang(), "window_title"))
+        title_label.configure(text=_gui_text(lang(), "app_title"))
+        subtitle_label.configure(text=_gui_text(lang(), "app_subtitle"))
+        credit_label.configure(text=_gui_text(lang(), "developer_credit"))
+        language_button.configure(text=_gui_text(lang(), "toggle_language"))
+        files_panel.configure(text=_gui_text(lang(), "files_panel"))
+        display_name_label.configure(text=_gui_text(lang(), "display_name_label"))
+        apply_name_button.configure(text=_gui_text(lang(), "apply_display_name"))
+        reset_name_button.configure(text=_gui_text(lang(), "reset_display_name"))
+        add_files_button.configure(text=_gui_text(lang(), "add_files"))
+        add_folder_button.configure(text=_gui_text(lang(), "add_folder"))
+        remove_button.configure(text=_gui_text(lang(), "remove_selected"))
+        clear_button.configure(text=_gui_text(lang(), "clear_files"))
+        settings_panel.configure(text=_gui_text(lang(), "settings_panel"))
+        output_label.configure(text=_gui_text(lang(), "output_file"))
+        choose_output_button.configure(text=_gui_text(lang(), "choose_output"))
+        xray_preset_label.configure(text=_gui_text(lang(), "xray_preset"))
+        manual_energy_label.configure(text=_gui_text(lang(), "manual_energy"))
+        d_range_label.configure(text=_gui_text(lang(), "d_range"))
+        d_range_to_label.configure(text=_gui_text(lang(), "to_text"))
+        d_range_unit_label.configure(text=_gui_text(lang(), "angstrom"))
+        settings_hint_label.configure(text=_gui_text(lang(), "settings_hint"))
+        preview_panel.configure(text=_gui_text(lang(), "preview_panel"))
+        tree.heading("display_name", text=_gui_text(lang(), "tree_display_name"))
+        tree.heading("formula", text=_gui_text(lang(), "tree_formula"))
+        tree.heading("space_group", text=_gui_text(lang(), "tree_space_group"))
+        tree.heading("peaks", text=_gui_text(lang(), "tree_status"))
+        tree.heading("warning", text=_gui_text(lang(), "tree_warning"))
+        export_button.configure(text=_gui_text(lang(), "export_excel"))
+        open_button.configure(text=_gui_text(lang(), "open_excel"))
+        input_summary_var.set(
+            _gui_text(lang(), "no_cif")
+            if not selected_paths
+            else _gui_text(lang(), "cif_count", count=len(selected_paths))
+        )
+        drop_hint_var.set(
+            _gui_text(lang(), "drop_hint_available")
+            if dnd_available
+            else _gui_text(lang(), "drop_hint_unavailable")
+        )
+        update_settings_summary()
+        if selected_paths:
+            status_var.set(_gui_text(lang(), "ready_to_export"))
+        else:
+            status_var.set(_gui_text(lang(), "ready_to_add"))
+        if refresh_preview:
+            schedule_preview()
+
+    def toggle_language() -> None:
+        language_var.set("en" if lang() == "zh" else "zh")
+        apply_language(refresh_preview=True)
 
     for drop_widget in (root, files_panel, listbox, preview_panel, tree):
         register_drop_target(drop_widget)
 
+    language_button.configure(command=toggle_language)
     export_button.configure(command=export_now)
     export_button.configure(state=tk.NORMAL if selected_paths else tk.DISABLED)
     open_button.configure(command=open_output_folder)
+    apply_language()
     refresh_list()
     root.mainloop()
 

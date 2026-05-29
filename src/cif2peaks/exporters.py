@@ -179,7 +179,18 @@ def _summary_rows(payload: Cif2PeaksExportPayload) -> list[list[Any]]:
         ["q_definition", "q = 4*pi*sin(theta)/lambda"],
         ["g_definition", "g = 1/d"],
         [],
-        ["phase_name", "cif_name", "cif_hash", "formula", "space_group", "enabled", "peak_count", "error", "warnings"],
+        [
+            "phase_name",
+            "cif_name",
+            "cif_path",
+            "cif_hash",
+            "formula",
+            "space_group",
+            "enabled",
+            "peak_count",
+            "error",
+            "warnings",
+        ],
     ]
     for phase in payload.phases:
         crystal = phase.crystal
@@ -187,6 +198,7 @@ def _summary_rows(payload: Cif2PeaksExportPayload) -> list[list[Any]]:
             [
                 phase.phase_name,
                 phase.cif_path.name,
+                str(phase.cif_path),
                 "" if crystal is None else crystal.cif_hash,
                 "" if crystal is None else crystal.formula,
                 phase.display_space_group,
@@ -246,6 +258,7 @@ def _user_guide_rows(payload: Cif2PeaksExportPayload) -> list[list[Any]]:
         ["常用列名", "含义"],
         ["phase_name", "相名，默认来自 CIF 文件名。"],
         ["cif_name", "原始 CIF 文件名。"],
+        ["cif_path", "原始 CIF 完整路径，可用于追溯同名文件。"],
         ["formula", "程序从 CIF 读取到的化学式。"],
         ["space_group", "空间群。"],
         ["hkl", "晶面指数。"],

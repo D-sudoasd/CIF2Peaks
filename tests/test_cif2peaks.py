@@ -1035,6 +1035,88 @@ def test_gui_drop_adds_cifs_and_reports_ignored_inputs(tmp_path: Path) -> None:
     assert selected_paths == [cif.resolve(), uppercase_cif.resolve(), nested_cif.resolve()]
 
 
+def test_gui_language_pack_covers_primary_controls() -> None:
+    from cif2peaks.gui import GUI_TEXT, SUPPORTED_GUI_LANGUAGES
+
+    required_keys = {
+        "window_title",
+        "app_title",
+        "app_subtitle",
+        "developer_credit",
+        "toggle_language",
+        "files_panel",
+        "display_name_label",
+        "apply_display_name",
+        "reset_display_name",
+        "add_files",
+        "add_folder",
+        "remove_selected",
+        "clear_files",
+        "settings_panel",
+        "output_file",
+        "choose_output",
+        "xray_preset",
+        "manual_energy",
+        "d_range",
+        "preview_panel",
+        "tree_display_name",
+        "tree_formula",
+        "tree_space_group",
+        "tree_status",
+        "tree_warning",
+        "export_excel",
+        "open_excel",
+    }
+
+    assert set(SUPPORTED_GUI_LANGUAGES) == {"zh", "en"}
+    for language in SUPPORTED_GUI_LANGUAGES:
+        missing = [key for key in sorted(required_keys) if not GUI_TEXT[language].get(key)]
+        assert not missing
+
+
+def test_gui_export_uses_custom_cif_display_names_and_preserves_original_cif_trace(tmp_path: Path) -> None:
+    from cif2peaks.gui import run_simple_gui_export
+
+    cif1 = tmp_path / TI_BETA_CIF.name
+    cif2 = tmp_path / TI_NB_HCP_CIF.name
+    cif1.write_bytes(TI_BETA_CIF.read_bytes())
+    cif2.write_bytes(TI_NB_HCP_CIF.read_bytes())
+    output = tmp_path / "custom_names.xlsx"
+
+    result = run_simple_gui_export(
+        [cif1, cif2],
+        output,
+        display_names={
+            cif1: "Beta Ti sample A",
+            str(cif2.resolve()): "HCP Ti-Nb reference",
+        },
+    )
+
+    assert [row[0] for row in result.phase_rows] == ["Beta Ti sample A", "HCP Ti-Nb reference"]
+
+    combined_rows = _worksheet_rows(output, 2)
+    headers = combined_rows[0]
+    phase_index = headers.index("phase_name")
+    cif_name_index = headers.index("cif_name")
+    assert "Beta Ti sample A" in {row[phase_index] for row in combined_rows[1:]}
+    assert "HCP Ti-Nb reference" in {row[phase_index] for row in combined_rows[1:]}
+    assert {row[cif_name_index] for row in combined_rows[1:]} == {cif1.name, cif2.name}
+
+    summary_rows = _worksheet_rows(output, 1)
+    summary_header_index = next(index for index, row in enumerate(summary_rows) if row and row[0] == "phase_name")
+    summary_header = summary_rows[summary_header_index]
+    summary_data = summary_rows[summary_header_index + 1 : summary_header_index + 3]
+    assert "cif_path" in summary_header
+    assert [row[0] for row in summary_data] == ["Beta Ti sample A", "HCP Ti-Nb reference"]
+    assert {row[summary_header.index("cif_name")] for row in summary_data} == {cif1.name, cif2.name}
+    assert {row[summary_header.index("cif_path")] for row in summary_data} == {str(cif1.resolve()), str(cif2.resolve())}
+
+    with ZipFile(output) as archive:
+        workbook_xml = archive.read("xl/workbook.xml").decode("utf-8")
+    assert "Beta Ti sample A" in workbook_xml
+    assert "HCP Ti-Nb reference" in workbook_xml
+
+
 def test_quick_export_uses_dragged_cifs_and_smart_default_output(tmp_path: Path) -> None:
     from cif2peaks.quick_export import quick_export_cif2peaks
 
