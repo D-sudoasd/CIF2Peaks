@@ -17,6 +17,7 @@ class StructureValidationReport:
     warnings: list[str] = field(default_factory=list)
     space_group_detected: str | None = None
     space_group_from_cif: str | None = None
+    space_group_number_from_cif: int | None = None
     occupancy_summary: str = ""
 
 
@@ -127,7 +128,7 @@ class XrdPhase:
     def display_space_group(self) -> str:
         if self.crystal is None:
             return "-"
-        return self.crystal.space_group_symbol or self.crystal.detected_space_group_symbol or "-"
+        return self.crystal.detected_space_group_symbol or self.crystal.space_group_symbol or "-"
 
     @property
     def display_formula(self) -> str:

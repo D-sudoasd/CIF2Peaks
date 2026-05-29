@@ -163,6 +163,7 @@ class XRDService:
                 "structure_version_token": crystal.cif_hash,
                 "cif_path": str(crystal.cif_path),
                 "formula": crystal.formula,
+                "space_group": crystal.detected_space_group_symbol or crystal.space_group_symbol,
                 "space_group_from_cif": crystal.space_group_symbol,
                 "space_group_detected": crystal.detected_space_group_symbol,
                 "xray_input_mode": resolved_request.input_mode,

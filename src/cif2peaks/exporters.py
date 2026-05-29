@@ -37,6 +37,8 @@ PEAK_HEADERS = [
     "q_1_over_A",
     "theta_deg",
     "two_theta_cu_ka_deg",
+    "space_group_from_cif",
+    "space_group_detected",
 ]
 
 PEAK_REFERENCE_HEADERS = [
@@ -52,6 +54,8 @@ PEAK_REFERENCE_HEADERS = [
     "relative_intensity",
     "multiplicity",
     "warnings",
+    "space_group_from_cif",
+    "space_group_detected",
 ]
 
 BEGINNER_PEAK_HEADERS = [
@@ -108,6 +112,18 @@ def _format_peak_row_hkl(row: Cif2PeaksPeakRow) -> str:
     return format_hkl((row.h, row.k, row.i, row.l))
 
 
+def _space_group_from_cif(phase: XrdPhase) -> str:
+    if phase.crystal is None:
+        return ""
+    return phase.crystal.validation_report.space_group_from_cif or ""
+
+
+def _space_group_detected(phase: XrdPhase) -> str:
+    if phase.crystal is None:
+        return ""
+    return phase.crystal.detected_space_group_symbol or ""
+
+
 def combined_peak_rows(phases: list[XrdPhase]) -> list[dict[str, Any]]:
     rows: list[dict[str, Any]] = []
     for phase in phases:
@@ -121,6 +137,8 @@ def combined_peak_rows(phases: list[XrdPhase]) -> list[dict[str, Any]]:
                     "space_group": phase.display_space_group,
                     "hkl": _format_peak_row_hkl(row),
                     "warnings": warnings_text,
+                    "space_group_from_cif": _space_group_from_cif(phase),
+                    "space_group_detected": _space_group_detected(phase),
                 }
             )
             rows.append(values)
@@ -147,6 +165,8 @@ def peak_reference_rows(phases: list[XrdPhase]) -> list[dict[str, Any]]:
                     "relative_intensity": row.relative_intensity,
                     "multiplicity": row.multiplicity,
                     "warnings": warnings_text,
+                    "space_group_from_cif": _space_group_from_cif(phase),
+                    "space_group_detected": _space_group_detected(phase),
                 }
             )
     return rows
@@ -186,6 +206,8 @@ def _summary_rows(payload: Cif2PeaksExportPayload) -> list[list[Any]]:
             "cif_hash",
             "formula",
             "space_group",
+            "space_group_from_cif",
+            "space_group_detected",
             "enabled",
             "peak_count",
             "error",
@@ -202,6 +224,8 @@ def _summary_rows(payload: Cif2PeaksExportPayload) -> list[list[Any]]:
                 "" if crystal is None else crystal.cif_hash,
                 "" if crystal is None else crystal.formula,
                 phase.display_space_group,
+                _space_group_from_cif(phase),
+                _space_group_detected(phase),
                 phase.enabled,
                 0 if phase.result is None else len(phase.result.peaks),
                 friendly_cif_issue_message(phase.error, []),
@@ -294,6 +318,8 @@ def export_cif2peaks_json(payload: Cif2PeaksExportPayload, output_path: str | Pa
                     "cif_hash": phase.crystal.cif_hash,
                     "formula": phase.crystal.formula,
                     "space_group": phase.display_space_group,
+                    "space_group_from_cif": phase.crystal.validation_report.space_group_from_cif,
+                    "space_group_detected": phase.crystal.detected_space_group_symbol,
                     "cell_parameters": phase.crystal.cell_parameters,
                 },
                 "metadata": {} if phase.result is None else _to_jsonable(phase.result.metadata),
@@ -381,6 +407,8 @@ def _table_column_widths(headers: list[Any]) -> list[int]:
         "cif_name": 28,
         "formula": 16,
         "space_group": 16,
+        "space_group_from_cif": 20,
+        "space_group_detected": 22,
         "hkl": 12,
         "d_A": 12,
         "two_theta_current_deg": 20,

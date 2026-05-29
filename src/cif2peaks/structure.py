@@ -26,6 +26,40 @@ def _clean_cif_scalar(value: str | None) -> str | None:
     return text or None
 
 
+def _parse_cif_int(value: str | None) -> int | None:
+    text = _clean_cif_scalar(value)
+    if text is None or text in {"?", "."}:
+        return None
+    try:
+        return int(float(text.split("(")[0]))
+    except ValueError:
+        return None
+
+
+def _normalized_space_group_symbol(symbol: str | None) -> str | None:
+    text = _clean_cif_scalar(symbol)
+    if text is None:
+        return None
+    return "".join(text.lower().split())
+
+
+def _space_group_mismatch_warnings(
+    cif_symbol: str | None,
+    cif_number: int | None,
+    detected_symbol: str | None,
+    detected_number: int | None,
+) -> list[str]:
+    if detected_symbol is None or detected_number in {None, 1}:
+        return []
+    cif_is_p1 = cif_number == 1 or _normalized_space_group_symbol(cif_symbol) == "p1"
+    if not cif_is_p1:
+        return []
+    displayed_cif = cif_symbol or f"#{cif_number}"
+    return [
+        f"CIF reports {displayed_cif}, but spglib detected {detected_symbol}; display/export uses detected value."
+    ]
+
+
 def _read_formula(block: gemmi.cif.Block, structure: PymatgenStructure) -> str:
     formula = _clean_cif_scalar(block.find_value("_chemical_formula_sum")) or _clean_cif_scalar(
         block.find_value("_chemical_name_systematic")
@@ -146,11 +180,25 @@ def load_crystal_model(cif_path: str | Path) -> CrystalModel:
     structure, parser_warnings = _load_pymatgen_structure(path)
     detected_number, detected_symbol, warnings = _spglib_dataset(structure)
     cell = structure.lattice
+    space_group_from_cif = _clean_cif_scalar(block.find_value("_symmetry_space_group_name_H-M")) or _clean_cif_scalar(
+        block.find_value("_space_group_name_H-M_alt")
+    )
+    space_group_number_from_cif = _parse_cif_int(block.find_value("_symmetry_Int_Tables_number")) or _parse_cif_int(
+        block.find_value("_space_group_IT_number")
+    )
+    warnings.extend(
+        _space_group_mismatch_warnings(
+            space_group_from_cif,
+            space_group_number_from_cif,
+            detected_symbol,
+            detected_number,
+        )
+    )
     report = StructureValidationReport(
         warnings=[*parser_warnings, *warnings],
         space_group_detected=detected_symbol,
-        space_group_from_cif=_clean_cif_scalar(block.find_value("_symmetry_space_group_name_H-M"))
-        or _clean_cif_scalar(block.find_value("_space_group_name_H-M_alt")),
+        space_group_from_cif=space_group_from_cif,
+        space_group_number_from_cif=space_group_number_from_cif,
         occupancy_summary="存在部分占位，按平均结构计算。" if _has_partial_occupancy(structure) else "所有位点按全占位处理。",
     )
     return CrystalModel(

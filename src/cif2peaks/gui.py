@@ -38,13 +38,35 @@ class GuiCifInputUpdate:
 SUPPORTED_GUI_LANGUAGES = ("zh", "en")
 APP_DISPLAY_NAME = "CIF2peaks"
 DEVELOPER_CREDIT = "Developed by Dr. GONG Delun"
+GUI_THEME = {
+    "surface": "#eef3f8",
+    "panel": "#ffffff",
+    "panel_alt": "#f7f9fc",
+    "primary": "#1f5eff",
+    "primary_active": "#1748c8",
+    "border": "#d7e0ea",
+    "text": "#172033",
+    "muted": "#5f6f83",
+    "subtle": "#8a98aa",
+    "table_header": "#e8eef6",
+}
+GUI_WORKBENCH_LAYOUT = {
+    "geometry": "1200x760",
+    "minsize": (1040, 680),
+    "sidebar_width": 330,
+}
 GUI_TEXT = {
     "zh": {
         "window_title": "CIF2peaks - CIF 转 Excel",
-        "app_title": "CIF2peaks 一键导出",
-        "app_subtitle": "把 CIF 晶体结构批量转换为理论粉末 XRD 峰表，结果可直接用 Excel、Origin 或 Python 继续处理。",
+        "app_title": "CIF2peaks",
+        "app_subtitle": "CIF 晶体结构到理论粉末 XRD 峰表的数据工作台",
         "developer_credit": DEVELOPER_CREDIT,
         "toggle_language": "English",
+        "workspace_section": "XRD Peak Reference Workbench",
+        "data_source_title": "CIF 数据源",
+        "parameters_title": "导出参数",
+        "preview_title": "峰表预览",
+        "status_ready": "就绪",
         "files_panel": "1. 添加 CIF 文件并命名",
         "display_name_label": "选中 CIF 显示名",
         "apply_display_name": "应用名称",
@@ -106,10 +128,15 @@ GUI_TEXT = {
     },
     "en": {
         "window_title": "CIF2peaks - CIF to Excel",
-        "app_title": "CIF2peaks quick export",
-        "app_subtitle": "Convert CIF crystal structures into theoretical powder XRD peak tables for Excel, Origin, or Python.",
+        "app_title": "CIF2peaks",
+        "app_subtitle": "A data workbench for CIF structures and theoretical powder XRD peak tables",
         "developer_credit": DEVELOPER_CREDIT,
         "toggle_language": "中文",
+        "workspace_section": "XRD Peak Reference Workbench",
+        "data_source_title": "CIF data source",
+        "parameters_title": "Export parameters",
+        "preview_title": "Peak table preview",
+        "status_ready": "Ready",
         "files_panel": "1. Add and name CIF files",
         "display_name_label": "Selected CIF display name",
         "apply_display_name": "Apply name",
@@ -212,6 +239,42 @@ def _apply_display_names_to_phases(
     for phase in phases:
         phase_path = getattr(phase, "cif_path")
         setattr(phase, "phase_name", _display_name_for_path(phase_path, lookup))
+
+
+def _configure_workbench_theme(root: object, style: object) -> None:
+    try:
+        style.theme_use("clam")
+    except Exception:
+        pass
+    root.configure(background=GUI_THEME["surface"])
+    font = ("Microsoft YaHei UI", 10)
+    style.configure(".", font=font)
+    style.configure("TFrame", background=GUI_THEME["surface"])
+    style.configure("Workbench.TFrame", background=GUI_THEME["surface"])
+    style.configure("Header.TFrame", background=GUI_THEME["surface"])
+    style.configure("Card.TFrame", background=GUI_THEME["panel"], relief="solid", borderwidth=1)
+    style.configure("CardBody.TFrame", background=GUI_THEME["panel"])
+    style.configure("Toolbar.TFrame", background=GUI_THEME["panel"])
+    style.configure("Footer.TFrame", background=GUI_THEME["surface"])
+    style.configure("TLabel", background=GUI_THEME["surface"], foreground=GUI_THEME["text"])
+    style.configure("Card.TLabel", background=GUI_THEME["panel"], foreground=GUI_THEME["text"])
+    style.configure("Title.TLabel", font=("Microsoft YaHei UI", 24, "bold"), foreground=GUI_THEME["text"])
+    style.configure("Section.TLabel", font=("Microsoft YaHei UI", 12, "bold"), background=GUI_THEME["panel"], foreground=GUI_THEME["text"])
+    style.configure("Subtitle.TLabel", font=("Microsoft YaHei UI", 10), foreground=GUI_THEME["muted"])
+    style.configure("CardSubtitle.TLabel", font=("Microsoft YaHei UI", 9), background=GUI_THEME["panel"], foreground=GUI_THEME["muted"])
+    style.configure("Credit.TLabel", font=("Microsoft YaHei UI", 9), foreground=GUI_THEME["subtle"])
+    style.configure("Primary.TButton", font=("Microsoft YaHei UI", 11, "bold"), padding=(20, 11), foreground="#ffffff")
+    style.map("Primary.TButton", background=[("active", GUI_THEME["primary_active"]), ("!disabled", GUI_THEME["primary"])])
+    style.configure("Action.TButton", padding=(10, 6))
+    style.configure("Language.TButton", padding=(12, 6))
+    style.configure("Workbench.Treeview", rowheight=28, fieldbackground=GUI_THEME["panel"], background=GUI_THEME["panel"], foreground=GUI_THEME["text"])
+    style.configure(
+        "Workbench.Treeview.Heading",
+        font=("Microsoft YaHei UI", 10, "bold"),
+        background=GUI_THEME["table_header"],
+        foreground=GUI_THEME["text"],
+        relief="flat",
+    )
 
 
 def _configure_tcl_tk_environment(python_base: str | Path | None = None) -> None:
@@ -605,33 +668,11 @@ def _launch_tk_app(initial_paths: Sequence[str | Path] = ()) -> None:
         dnd_available = False
     if os.environ.get("CIF2PEAKS_SMOKE_TEST") == "1":
         root.after(300, root.destroy)
-    root.geometry("1120x740")
-    root.minsize(980, 660)
+    root.geometry(GUI_WORKBENCH_LAYOUT["geometry"])
+    root.minsize(*GUI_WORKBENCH_LAYOUT["minsize"])
 
     style = ttk.Style(root)
-    try:
-        style.theme_use("clam")
-    except tk.TclError:
-        pass
-    surface_color = "#f5f7fb"
-    panel_color = "#ffffff"
-    accent_color = "#2563eb"
-    root.configure(background=surface_color)
-    style.configure(".", font=("Microsoft YaHei UI", 10))
-    style.configure("TFrame", background=surface_color)
-    style.configure("Card.TFrame", background=panel_color)
-    style.configure("TLabelframe", background=panel_color, bordercolor="#d8dee9", relief="solid")
-    style.configure("TLabelframe.Label", background=surface_color, foreground="#182235")
-    style.configure("TLabel", background=surface_color, foreground="#182235")
-    style.configure("Title.TLabel", font=("Microsoft YaHei UI", 18, "bold"))
-    style.configure("Subtitle.TLabel", font=("Microsoft YaHei UI", 10), foreground="#516070")
-    style.configure("Credit.TLabel", font=("Microsoft YaHei UI", 9), foreground="#6b7280")
-    style.configure("Step.TLabelframe.Label", font=("Microsoft YaHei UI", 11, "bold"))
-    style.configure("Primary.TButton", font=("Microsoft YaHei UI", 12, "bold"), padding=(18, 10), foreground="#ffffff")
-    style.map("Primary.TButton", background=[("active", "#1d4ed8"), ("!disabled", accent_color)])
-    style.configure("Action.TButton", padding=(10, 6))
-    style.configure("Treeview.Heading", font=("Microsoft YaHei UI", 10, "bold"))
-    style.configure("Treeview", rowheight=25)
+    _configure_workbench_theme(root, style)
 
     selected_paths: list[Path] = initial_gui_cif_paths(initial_paths)
     display_names: dict[Path, str] = {path: path.name for path in selected_paths}
@@ -665,46 +706,51 @@ def _launch_tk_app(initial_paths: Sequence[str | Path] = ()) -> None:
     root.columnconfigure(0, weight=1)
     root.rowconfigure(1, weight=1)
 
-    header = ttk.Frame(root, padding=(18, 16, 18, 8))
+    header = ttk.Frame(root, padding=(24, 18, 24, 10), style="Header.TFrame")
     header.grid(row=0, column=0, sticky="ew")
     header.columnconfigure(0, weight=1)
+    workspace_label = ttk.Label(header, style="Credit.TLabel")
+    workspace_label.grid(row=0, column=0, sticky="w")
     title_label = ttk.Label(header, style="Title.TLabel")
-    title_label.grid(row=0, column=0, sticky="w")
-    language_button = ttk.Button(header, style="Action.TButton")
-    language_button.grid(row=0, column=1, sticky="e")
+    title_label.grid(row=1, column=0, sticky="w", pady=(2, 0))
+    language_button = ttk.Button(header, style="Language.TButton")
+    language_button.grid(row=1, column=1, sticky="e")
     subtitle_label = ttk.Label(header, style="Subtitle.TLabel")
     subtitle_label.grid(
-        row=1,
+        row=2,
         column=0,
         sticky="w",
         pady=(4, 0),
     )
     credit_label = ttk.Label(header, style="Credit.TLabel")
-    credit_label.grid(row=2, column=0, sticky="w", pady=(4, 0))
+    credit_label.grid(row=3, column=0, sticky="w", pady=(6, 0))
 
-    main = ttk.Frame(root, padding=(18, 8, 18, 10))
+    main = ttk.Frame(root, padding=(24, 10, 24, 12), style="Workbench.TFrame")
     main.grid(row=1, column=0, sticky="nsew")
-    main.columnconfigure(0, weight=1)
+    main.columnconfigure(0, weight=0, minsize=GUI_WORKBENCH_LAYOUT["sidebar_width"])
     main.columnconfigure(1, weight=1)
-    main.rowconfigure(0, weight=1)
+    main.rowconfigure(0, weight=0)
     main.rowconfigure(1, weight=1)
 
-    files_panel = ttk.LabelFrame(main, padding=12, style="Step.TLabelframe")
-    files_panel.grid(row=0, column=0, rowspan=2, sticky="nsew", padx=(0, 10))
+    files_panel = ttk.Frame(main, padding=14, style="Card.TFrame")
+    files_panel.grid(row=0, column=0, rowspan=2, sticky="nsew", padx=(0, 14))
     files_panel.columnconfigure(0, weight=1)
-    files_panel.rowconfigure(4, weight=1)
+    files_panel.rowconfigure(5, weight=1)
 
-    file_buttons = ttk.Frame(files_panel)
-    file_buttons.grid(row=0, column=0, sticky="ew", pady=(0, 8))
+    files_panel_title = ttk.Label(files_panel, style="Section.TLabel")
+    files_panel_title.grid(row=0, column=0, columnspan=2, sticky="w", pady=(0, 2))
+
+    file_buttons = ttk.Frame(files_panel, style="Toolbar.TFrame")
+    file_buttons.grid(row=1, column=0, sticky="ew", pady=(8, 10))
     file_buttons.columnconfigure(3, weight=1)
 
-    ttk.Label(files_panel, textvariable=input_summary_var).grid(row=1, column=0, sticky="w")
-    ttk.Label(files_panel, textvariable=drop_hint_var, style="Subtitle.TLabel").grid(row=2, column=0, sticky="w", pady=(2, 8))
+    ttk.Label(files_panel, textvariable=input_summary_var, style="Card.TLabel").grid(row=2, column=0, sticky="w")
+    ttk.Label(files_panel, textvariable=drop_hint_var, style="CardSubtitle.TLabel").grid(row=3, column=0, sticky="w", pady=(2, 10))
 
-    display_name_frame = ttk.Frame(files_panel)
-    display_name_frame.grid(row=3, column=0, columnspan=2, sticky="ew", pady=(0, 8))
+    display_name_frame = ttk.Frame(files_panel, style="CardBody.TFrame")
+    display_name_frame.grid(row=4, column=0, columnspan=2, sticky="ew", pady=(0, 10))
     display_name_frame.columnconfigure(1, weight=1)
-    display_name_label = ttk.Label(display_name_frame)
+    display_name_label = ttk.Label(display_name_frame, style="Card.TLabel")
     display_name_label.grid(row=0, column=0, sticky="w", padx=(0, 8))
     display_name_entry = ttk.Entry(display_name_frame, textvariable=display_name_var)
     display_name_entry.grid(row=0, column=1, sticky="ew", padx=(0, 6))
@@ -713,10 +759,23 @@ def _launch_tk_app(initial_paths: Sequence[str | Path] = ()) -> None:
     reset_name_button = ttk.Button(display_name_frame, style="Action.TButton")
     reset_name_button.grid(row=0, column=3)
 
-    listbox = tk.Listbox(files_panel, height=14, selectmode=tk.EXTENDED)
-    listbox.grid(row=4, column=0, sticky="nsew")
+    listbox = tk.Listbox(
+        files_panel,
+        height=16,
+        selectmode=tk.EXTENDED,
+        bd=0,
+        highlightthickness=1,
+        highlightbackground=GUI_THEME["border"],
+        highlightcolor=GUI_THEME["primary"],
+        bg=GUI_THEME["panel_alt"],
+        fg=GUI_THEME["text"],
+        selectbackground=GUI_THEME["primary"],
+        selectforeground="#ffffff",
+        activestyle="none",
+    )
+    listbox.grid(row=5, column=0, sticky="nsew")
     scrollbar = ttk.Scrollbar(files_panel, orient="vertical", command=listbox.yview)
-    scrollbar.grid(row=4, column=1, sticky="ns")
+    scrollbar.grid(row=5, column=1, sticky="ns")
     listbox.configure(yscrollcommand=scrollbar.set)
 
     def refresh_list() -> None:
@@ -815,16 +874,20 @@ def _launch_tk_app(initial_paths: Sequence[str | Path] = ()) -> None:
     apply_name_button.configure(command=apply_display_name)
     reset_name_button.configure(command=reset_display_name)
 
-    settings_panel = ttk.LabelFrame(main, padding=12, style="Step.TLabelframe")
-    settings_panel.grid(row=0, column=1, sticky="nsew", padx=(10, 0))
+    settings_panel = ttk.Frame(main, padding=14, style="Card.TFrame")
+    settings_panel.grid(row=0, column=1, sticky="nsew")
     settings_panel.columnconfigure(1, weight=1)
 
-    ttk.Label(settings_panel, textvariable=settings_summary_var).grid(row=0, column=0, columnspan=2, sticky="w", pady=(0, 10))
-    output_label = ttk.Label(settings_panel)
-    output_label.grid(row=1, column=0, sticky="w", pady=4)
+    settings_panel_title = ttk.Label(settings_panel, style="Section.TLabel")
+    settings_panel_title.grid(row=0, column=0, columnspan=2, sticky="w", pady=(0, 2))
+    ttk.Label(settings_panel, textvariable=settings_summary_var, style="CardSubtitle.TLabel").grid(
+        row=1, column=0, columnspan=2, sticky="w", pady=(0, 12)
+    )
+    output_label = ttk.Label(settings_panel, style="Card.TLabel")
+    output_label.grid(row=2, column=0, sticky="w", pady=5)
 
-    output_frame = ttk.Frame(settings_panel)
-    output_frame.grid(row=1, column=1, sticky="ew", pady=4)
+    output_frame = ttk.Frame(settings_panel, style="CardBody.TFrame")
+    output_frame.grid(row=2, column=1, sticky="ew", pady=5)
     output_frame.columnconfigure(0, weight=1)
     ttk.Entry(output_frame, textvariable=output_var).grid(row=0, column=0, sticky="ew", padx=(0, 6))
 
@@ -858,38 +921,41 @@ def _launch_tk_app(initial_paths: Sequence[str | Path] = ()) -> None:
             range_text = _gui_text(lang(), "d_unrestricted_summary")
         settings_summary_var.set(_gui_text(lang(), "settings_summary", source=source_text, range=range_text))
 
-    xray_preset_label = ttk.Label(settings_panel)
-    xray_preset_label.grid(row=2, column=0, sticky="w", pady=4)
+    xray_preset_label = ttk.Label(settings_panel, style="Card.TLabel")
+    xray_preset_label.grid(row=3, column=0, sticky="w", pady=5)
     preset_box = ttk.Combobox(settings_panel, textvariable=xray_preset_var, values=GUI_XRAY_PRESET_LABELS, state="readonly", width=12)
-    preset_box.grid(row=2, column=1, sticky="w", pady=4)
-    manual_energy_label = ttk.Label(settings_panel)
-    manual_energy_label.grid(row=3, column=0, sticky="w", pady=4)
-    ttk.Entry(settings_panel, textvariable=energy_var, width=12).grid(row=3, column=1, sticky="w", pady=4)
+    preset_box.grid(row=3, column=1, sticky="w", pady=5)
+    manual_energy_label = ttk.Label(settings_panel, style="Card.TLabel")
+    manual_energy_label.grid(row=4, column=0, sticky="w", pady=5)
+    ttk.Entry(settings_panel, textvariable=energy_var, width=12).grid(row=4, column=1, sticky="w", pady=5)
 
-    range_frame = ttk.Frame(settings_panel)
-    range_frame.grid(row=4, column=1, sticky="w", pady=4)
-    d_range_label = ttk.Label(settings_panel)
-    d_range_label.grid(row=4, column=0, sticky="w", pady=4)
+    range_frame = ttk.Frame(settings_panel, style="CardBody.TFrame")
+    range_frame.grid(row=5, column=1, sticky="w", pady=5)
+    d_range_label = ttk.Label(settings_panel, style="Card.TLabel")
+    d_range_label.grid(row=5, column=0, sticky="w", pady=5)
     ttk.Entry(range_frame, textvariable=min_var, width=8).grid(row=0, column=0, sticky="w")
-    d_range_to_label = ttk.Label(range_frame)
+    d_range_to_label = ttk.Label(range_frame, style="Card.TLabel")
     d_range_to_label.grid(row=0, column=1)
     ttk.Entry(range_frame, textvariable=max_var, width=8).grid(row=0, column=2, sticky="w")
-    d_range_unit_label = ttk.Label(range_frame)
+    d_range_unit_label = ttk.Label(range_frame, style="Card.TLabel")
     d_range_unit_label.grid(row=0, column=3, sticky="w")
-    settings_hint_label = ttk.Label(settings_panel, style="Subtitle.TLabel")
-    settings_hint_label.grid(row=5, column=0, columnspan=2, sticky="w", pady=(6, 0))
+    settings_hint_label = ttk.Label(settings_panel, style="CardSubtitle.TLabel")
+    settings_hint_label.grid(row=6, column=0, columnspan=2, sticky="w", pady=(8, 0))
     xray_preset_var.trace_add("write", lambda *_: update_settings_summary())
     energy_var.trace_add("write", lambda *_: update_settings_summary())
     min_var.trace_add("write", lambda *_: update_settings_summary())
     max_var.trace_add("write", lambda *_: update_settings_summary())
 
-    preview_panel = ttk.LabelFrame(main, padding=12, style="Step.TLabelframe")
-    preview_panel.grid(row=1, column=1, sticky="nsew", padx=(10, 0), pady=(10, 0))
+    preview_panel = ttk.Frame(main, padding=14, style="Card.TFrame")
+    preview_panel.grid(row=1, column=1, sticky="nsew", pady=(14, 0))
     preview_panel.columnconfigure(0, weight=1)
-    preview_panel.rowconfigure(0, weight=1)
+    preview_panel.rowconfigure(1, weight=1)
+
+    preview_panel_title = ttk.Label(preview_panel, style="Section.TLabel")
+    preview_panel_title.grid(row=0, column=0, sticky="w", pady=(0, 10))
 
     columns = ("display_name", "formula", "space_group", "peaks", "warning")
-    tree = ttk.Treeview(preview_panel, columns=columns, show="headings", height=9)
+    tree = ttk.Treeview(preview_panel, columns=columns, show="headings", height=10, style="Workbench.Treeview")
     for column, width in (
         ("display_name", 190),
         ("formula", 90),
@@ -899,18 +965,19 @@ def _launch_tk_app(initial_paths: Sequence[str | Path] = ()) -> None:
     ):
         tree.heading(column, text="")
         tree.column(column, width=width, anchor="w")
-    tree.grid(row=0, column=0, sticky="nsew")
+    tree.grid(row=1, column=0, sticky="nsew")
     tree_scroll = ttk.Scrollbar(preview_panel, orient="vertical", command=tree.yview)
-    tree_scroll.grid(row=0, column=1, sticky="ns")
+    tree_scroll.grid(row=1, column=1, sticky="ns")
     tree.configure(yscrollcommand=tree_scroll.set)
 
-    footer = ttk.Frame(root, padding=(18, 6, 18, 16))
+    footer = ttk.Frame(root, padding=(24, 8, 24, 18), style="Footer.TFrame")
     footer.grid(row=2, column=0, sticky="ew")
     footer.columnconfigure(1, weight=1)
 
     export_button = ttk.Button(footer, style="Primary.TButton")
     export_button.grid(row=0, column=0, sticky="w", padx=(0, 12))
-    ttk.Label(footer, textvariable=status_var).grid(row=0, column=1, sticky="w")
+    status_label = ttk.Label(footer, textvariable=status_var, style="Subtitle.TLabel")
+    status_label.grid(row=0, column=1, sticky="w")
     open_button = ttk.Button(footer, state=tk.DISABLED)
     open_button.grid(row=0, column=2, sticky="e")
 
@@ -1022,11 +1089,12 @@ def _launch_tk_app(initial_paths: Sequence[str | Path] = ()) -> None:
 
     def apply_language(refresh_preview: bool = False) -> None:
         root.title(_gui_text(lang(), "window_title"))
+        workspace_label.configure(text=_gui_text(lang(), "workspace_section"))
         title_label.configure(text=_gui_text(lang(), "app_title"))
         subtitle_label.configure(text=_gui_text(lang(), "app_subtitle"))
         credit_label.configure(text=_gui_text(lang(), "developer_credit"))
         language_button.configure(text=_gui_text(lang(), "toggle_language"))
-        files_panel.configure(text=_gui_text(lang(), "files_panel"))
+        files_panel_title.configure(text=_gui_text(lang(), "data_source_title"))
         display_name_label.configure(text=_gui_text(lang(), "display_name_label"))
         apply_name_button.configure(text=_gui_text(lang(), "apply_display_name"))
         reset_name_button.configure(text=_gui_text(lang(), "reset_display_name"))
@@ -1034,7 +1102,7 @@ def _launch_tk_app(initial_paths: Sequence[str | Path] = ()) -> None:
         add_folder_button.configure(text=_gui_text(lang(), "add_folder"))
         remove_button.configure(text=_gui_text(lang(), "remove_selected"))
         clear_button.configure(text=_gui_text(lang(), "clear_files"))
-        settings_panel.configure(text=_gui_text(lang(), "settings_panel"))
+        settings_panel_title.configure(text=_gui_text(lang(), "parameters_title"))
         output_label.configure(text=_gui_text(lang(), "output_file"))
         choose_output_button.configure(text=_gui_text(lang(), "choose_output"))
         xray_preset_label.configure(text=_gui_text(lang(), "xray_preset"))
@@ -1043,7 +1111,7 @@ def _launch_tk_app(initial_paths: Sequence[str | Path] = ()) -> None:
         d_range_to_label.configure(text=_gui_text(lang(), "to_text"))
         d_range_unit_label.configure(text=_gui_text(lang(), "angstrom"))
         settings_hint_label.configure(text=_gui_text(lang(), "settings_hint"))
-        preview_panel.configure(text=_gui_text(lang(), "preview_panel"))
+        preview_panel_title.configure(text=_gui_text(lang(), "preview_title"))
         tree.heading("display_name", text=_gui_text(lang(), "tree_display_name"))
         tree.heading("formula", text=_gui_text(lang(), "tree_formula"))
         tree.heading("space_group", text=_gui_text(lang(), "tree_space_group"))

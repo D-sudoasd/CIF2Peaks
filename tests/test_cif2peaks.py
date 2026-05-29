@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import csv
+import json
 import os
 import subprocess
 import sys
@@ -14,7 +15,7 @@ import numpy as np
 import pytest
 
 from cif2peaks.batch import batch_export_peak_reference
-from cif2peaks.exporters import combined_peak_rows, export_peak_reference_csv, export_cif2peaks_workbook
+from cif2peaks.exporters import combined_peak_rows, export_peak_reference_csv, export_cif2peaks_json, export_cif2peaks_workbook
 from cif2peaks.models import Cif2PeaksExportPayload, Cif2PeaksSettings
 from cif2peaks.service import Cif2PeaksService
 
@@ -442,6 +443,7 @@ def test_cubic_hkl_labels_remain_three_index_notation() -> None:
     assert first["k"] == 1
     assert first["i"] is None
     assert first["l"] == 0
+    assert not any("CIF reports" in warning for warning in phase.warning_messages)
 
 
 def test_cif2peaks_loads_occupancy_conflict_cif_with_warning(tmp_path: Path) -> None:
@@ -465,8 +467,60 @@ def test_cif2peaks_loads_standardized_unitcell_from_multi_block_cif(tmp_path: Pa
 
     assert phase.error is None
     assert phase.crystal is not None
-    assert phase.display_space_group == "P 1"
+    assert phase.crystal.validation_report.space_group_from_cif == "P 1"
+    assert phase.crystal.detected_space_group_symbol == "Pm-3m"
+    assert phase.display_space_group == "Pm-3m"
     assert phase.crystal.cell_parameters[:3] == (3.0, 3.0, 3.0)
+    assert any("CIF reports P 1" in warning and "spglib detected Pm-3m" in warning for warning in phase.warning_messages)
+
+
+def test_cif2peaks_exports_detected_space_group_and_preserves_cif_space_group(tmp_path: Path) -> None:
+    cif_path = _write_multi_block_standardized_cif(tmp_path / "multi_block.cif")
+    service = Cif2PeaksService()
+    phase = service.load_phase(cif_path)
+    settings = Cif2PeaksSettings()
+    service.simulate_phase(phase, settings)
+
+    rows = combined_peak_rows([phase])
+
+    assert rows
+    assert rows[0]["space_group"] == "Pm-3m"
+    assert rows[0]["space_group_from_cif"] == "P 1"
+    assert rows[0]["space_group_detected"] == "Pm-3m"
+
+    csv_output = tmp_path / "space_groups.csv"
+    export_peak_reference_csv(Cif2PeaksExportPayload([phase], settings), csv_output)
+    with csv_output.open("r", encoding="utf-8-sig", newline="") as handle:
+        csv_rows = list(csv.DictReader(handle))
+    assert csv_rows[0]["space_group"] == "Pm-3m"
+    assert csv_rows[0]["space_group_from_cif"] == "P 1"
+    assert csv_rows[0]["space_group_detected"] == "Pm-3m"
+
+    workbook_output = tmp_path / "space_groups.xlsx"
+    export_cif2peaks_workbook(Cif2PeaksExportPayload([phase], settings), workbook_output)
+    combined_sheet = _worksheet_rows(workbook_output, 2)
+    headers = combined_sheet[0]
+    assert "space_group_from_cif" in headers
+    assert "space_group_detected" in headers
+    assert combined_sheet[1][headers.index("space_group")] == "Pm-3m"
+    assert combined_sheet[1][headers.index("space_group_from_cif")] == "P 1"
+    assert combined_sheet[1][headers.index("space_group_detected")] == "Pm-3m"
+
+    summary_rows = _worksheet_rows(workbook_output, 1)
+    summary_header_index = next(index for index, row in enumerate(summary_rows) if row and row[0] == "phase_name")
+    summary_header = summary_rows[summary_header_index]
+    summary_data = summary_rows[summary_header_index + 1]
+    assert summary_data[summary_header.index("space_group")] == "Pm-3m"
+    assert summary_data[summary_header.index("space_group_from_cif")] == "P 1"
+    assert summary_data[summary_header.index("space_group_detected")] == "Pm-3m"
+
+    json_output = tmp_path / "space_groups.json"
+    export_cif2peaks_json(Cif2PeaksExportPayload([phase], settings), json_output)
+    data = json.loads(json_output.read_text(encoding="utf-8"))
+    crystal = data["phases"][0]["crystal"]
+    assert crystal["space_group"] == "Pm-3m"
+    assert crystal["space_group_from_cif"] == "P 1"
+    assert crystal["space_group_detected"] == "Pm-3m"
 
 
 def test_cif2peaks_batch_loads_real_cifs_and_keeps_occupancy_warning() -> None:
@@ -619,7 +673,7 @@ def test_cif2peaks_workbook_peak_sheets_are_excel_friendly(tmp_path: Path) -> No
         combined = archive.read("xl/worksheets/sheet2.xml").decode("utf-8")
 
     assert '<pane ySplit="1" topLeftCell="A2"' in combined
-    assert '<autoFilter ref="A1:S' in combined
+    assert '<autoFilter ref="A1:U' in combined
     assert '<cols>' in combined
     assert 'width="24"' in combined
 
@@ -1066,12 +1120,30 @@ def test_gui_language_pack_covers_primary_controls() -> None:
         "tree_warning",
         "export_excel",
         "open_excel",
+        "workspace_section",
+        "data_source_title",
+        "parameters_title",
+        "preview_title",
+        "status_ready",
     }
 
     assert set(SUPPORTED_GUI_LANGUAGES) == {"zh", "en"}
     for language in SUPPORTED_GUI_LANGUAGES:
         missing = [key for key in sorted(required_keys) if not GUI_TEXT[language].get(key)]
         assert not missing
+
+
+def test_gui_exposes_minimal_workbench_theme_contract() -> None:
+    from cif2peaks.gui import GUI_THEME, GUI_WORKBENCH_LAYOUT
+
+    assert GUI_WORKBENCH_LAYOUT["geometry"] == "1200x760"
+    assert GUI_WORKBENCH_LAYOUT["minsize"] == (1040, 680)
+    assert GUI_WORKBENCH_LAYOUT["sidebar_width"] == 330
+    assert GUI_THEME["surface"] == "#eef3f8"
+    assert GUI_THEME["panel"] == "#ffffff"
+    assert GUI_THEME["primary"] == "#1f5eff"
+    assert GUI_THEME["border"] == "#d7e0ea"
+    assert GUI_THEME["text"] == "#172033"
 
 
 def test_gui_export_uses_custom_cif_display_names_and_preserves_original_cif_trace(tmp_path: Path) -> None:
