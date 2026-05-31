@@ -15,7 +15,14 @@ import numpy as np
 import pytest
 
 from cif2peaks.batch import batch_export_peak_reference
-from cif2peaks.exporters import combined_peak_rows, export_peak_reference_csv, export_cif2peaks_json, export_cif2peaks_workbook
+from cif2peaks.exporters import (
+    combined_peak_rows,
+    export_peak_reference_csv,
+    export_cif2peaks_json,
+    export_cif2peaks_pattern_workbook,
+    export_cif2peaks_workbook,
+    pattern_profile_rows,
+)
 from cif2peaks.models import Cif2PeaksExportPayload, Cif2PeaksSettings
 from cif2peaks.service import Cif2PeaksService
 
@@ -187,6 +194,14 @@ def _worksheet_rows(workbook_path: Path, sheet_index: int) -> list[list[str]]:
             values.append("" if inline is None and numeric is None else ((inline.text or "") if inline is not None else numeric.text or ""))
         rows.append(values)
     return rows
+
+
+def _workbook_sheet_names(workbook_path: Path) -> list[str]:
+    namespace = {"main": "http://schemas.openxmlformats.org/spreadsheetml/2006/main"}
+    with ZipFile(workbook_path) as archive:
+        xml = archive.read("xl/workbook.xml")
+    root = ET.fromstring(xml)
+    return [sheet.attrib["name"] for sheet in root.findall(".//main:sheet", namespace)]
 
 
 def _worksheet_cell_styles(workbook_path: Path, sheet_index: int) -> list[list[str]]:
@@ -618,6 +633,104 @@ def test_cif2peaks_batch_export_can_still_write_csv(tmp_path: Path) -> None:
     assert output.exists()
     assert len(rows) == sum(len(phase.result.peaks) for phase in phases if phase.result is not None)
     assert {row["phase_name"] for row in rows} >= {"AlNi", "Cr2Nb", "FeCr", "Ni", "Ni3Al"}
+
+
+def test_pattern_workbook_exports_each_cif_and_combined_profile_rows(tmp_path: Path) -> None:
+    service = Cif2PeaksService()
+    phases = service.load_phases([TI_BETA_CIF, TI_NB_HCP_CIF])
+    settings = Cif2PeaksSettings(two_theta_min_deg=0.0, two_theta_max_deg=60.0, step_deg=1.0)
+    service.simulate_phases(phases, settings)
+    output = tmp_path / "patterns.xlsx"
+
+    export_cif2peaks_pattern_workbook(Cif2PeaksExportPayload(phases, settings), output, axis_mode="two_theta")
+
+    assert _workbook_sheet_names(output) == ["Summary", "Combined Patterns", "ti_beta_bcc_im3m", "ti_nb_hcp_p63mmc"]
+    rows = _worksheet_rows(output, 2)
+    assert rows[0] == [
+        "phase_name",
+        "cif_name",
+        "x_axis_mode",
+        "x",
+        "relative_intensity",
+        "two_theta_deg",
+        "d_A",
+        "q_1_over_A",
+        "g_1_over_A",
+    ]
+    data_rows = rows[1:]
+    assert len(data_rows) == sum(len(phase.result.two_theta_grid) for phase in phases if phase.result is not None)
+    assert {row[1] for row in data_rows} == {TI_BETA_CIF.name, TI_NB_HCP_CIF.name}
+    assert all(row[2] == "two_theta" for row in data_rows)
+    assert [float(row[3]) for row in data_rows[:3]] == [0.0, 1.0, 2.0]
+
+
+def test_pattern_profile_rows_convert_selected_axis_and_skip_nonfinite_values() -> None:
+    service = Cif2PeaksService()
+    phase = service.load_phase(TI_BETA_CIF)
+    settings = Cif2PeaksSettings(two_theta_min_deg=0.0, two_theta_max_deg=60.0, step_deg=1.0)
+    service.simulate_phase(phase, settings)
+    payload = Cif2PeaksExportPayload([phase], settings)
+
+    two_theta_rows = pattern_profile_rows(payload, axis_mode="two_theta")
+    d_rows = pattern_profile_rows(payload, axis_mode="d_spacing")
+    q_rows = pattern_profile_rows(payload, axis_mode="q")
+    g_rows = pattern_profile_rows(payload, axis_mode="g")
+
+    assert [row["x"] for row in two_theta_rows[:3]] == [0.0, 1.0, 2.0]
+    assert len(d_rows) == len(two_theta_rows) - 1
+    assert d_rows[0]["two_theta_deg"] == 1.0
+    theta = np.deg2rad(1.0 / 2.0)
+    expected_d = settings.wavelength_A / (2.0 * np.sin(theta))
+    expected_q = 4.0 * np.pi * np.sin(theta) / settings.wavelength_A
+    assert np.isclose(d_rows[0]["x"], expected_d)
+    assert np.isclose(q_rows[1]["x"], expected_q)
+    assert np.isclose(g_rows[1]["x"], 1.0 / expected_d)
+    assert all(np.isfinite(row["x"]) for row in d_rows)
+
+
+def test_batch_export_patterns_cli_writes_pattern_workbook_without_changing_default(tmp_path: Path) -> None:
+    default_output = tmp_path / "cli_default.xlsx"
+    pattern_base = tmp_path / "cli_patterns.xlsx"
+
+    default_result = subprocess.run(
+        [sys.executable, "-m", "cif2peaks", str(TI_BETA_CIF), "-o", str(default_output)],
+        cwd=ROOT,
+        env=_subprocess_env(),
+        text=True,
+        capture_output=True,
+        timeout=20,
+        check=False,
+    )
+    pattern_result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "cif2peaks",
+            str(TI_BETA_CIF),
+            "-o",
+            str(pattern_base),
+            "--export-patterns",
+            "--pattern-axis",
+            "q",
+        ],
+        cwd=ROOT,
+        env=_subprocess_env(),
+        text=True,
+        capture_output=True,
+        timeout=20,
+        check=False,
+    )
+
+    assert default_result.returncode == 0, default_result.stderr
+    assert default_output.exists()
+    assert not (tmp_path / "cli_default_谱线.xlsx").exists()
+    assert pattern_result.returncode == 0, pattern_result.stderr
+    assert (tmp_path / "cli_patterns_峰表.xlsx").exists()
+    pattern_output = tmp_path / "cli_patterns_谱线.xlsx"
+    assert pattern_output.exists()
+    rows = _worksheet_rows(pattern_output, 2)
+    assert rows[1][2] == "q"
+    assert float(rows[1][3]) >= 0.0
 
 
 def test_cif2peaks_batch_load_isolates_unrecoverable_bad_cif(tmp_path: Path) -> None:
@@ -1219,6 +1332,7 @@ def test_gui_defines_tooltips_and_clear_confirmation_contract(tmp_path: Path) ->
         SUPPORTED_GUI_LANGUAGES,
         should_clear_gui_files,
         should_overwrite_gui_output,
+        should_overwrite_gui_outputs,
     )
     from cif2peaks.plotting import FIGURE_EXPORT_PRESETS
 
@@ -1277,6 +1391,18 @@ def test_gui_defines_tooltips_and_clear_confirmation_contract(tmp_path: Path) ->
     assert not should_overwrite_gui_output(existing_output, lambda path: overwrite_calls.append(path) or False)
     assert overwrite_calls == [existing_output.resolve()]
     assert should_overwrite_gui_output(existing_output, lambda _path: True)
+
+    peak_output = tmp_path / "result_峰表.xlsx"
+    pattern_output = tmp_path / "result_谱线.xlsx"
+    peak_output.write_text("old peak workbook", encoding="utf-8")
+    pattern_output.write_text("old pattern workbook", encoding="utf-8")
+    overwrite_calls.clear()
+
+    assert not should_overwrite_gui_outputs([peak_output, pattern_output], lambda path: overwrite_calls.append(path) or False)
+    assert overwrite_calls == [peak_output.resolve()]
+    overwrite_calls.clear()
+    assert should_overwrite_gui_outputs([None, peak_output, pattern_output, peak_output], lambda path: overwrite_calls.append(path) or True)
+    assert overwrite_calls == [peak_output.resolve(), pattern_output.resolve()]
 
 
 def test_publication_figure_presets_cover_common_export_contexts() -> None:
@@ -1610,6 +1736,37 @@ def test_simple_gui_export_writes_xlsx_without_json_sidecar(tmp_path: Path) -> N
     assert result.phase_rows[0][3] == result.total_peaks
     assert result.phase_rows[0][4] == ""
     assert result.publication_figure_paths == []
+
+
+def test_simple_gui_export_can_write_only_patterns_or_both_outputs(tmp_path: Path) -> None:
+    from cif2peaks.gui import run_simple_gui_export
+
+    patterns_only_base = tmp_path / "patterns_only.xlsx"
+    both_base = tmp_path / "both.xlsx"
+
+    patterns_only = run_simple_gui_export(
+        [TI_BETA_CIF],
+        patterns_only_base,
+        export_peaks=False,
+        export_patterns=True,
+        pattern_axis="g",
+    )
+    both = run_simple_gui_export([TI_BETA_CIF], both_base, export_patterns=True, pattern_axis="d_spacing")
+
+    assert patterns_only.output_path == tmp_path / "patterns_only_谱线.xlsx"
+    assert patterns_only.peak_output_path is None
+    assert patterns_only.pattern_output_path == patterns_only.output_path
+    assert patterns_only.pattern_output_path.exists()
+    assert not patterns_only_base.exists()
+    rows = _worksheet_rows(patterns_only.pattern_output_path, 2)
+    assert rows[1][2] == "g"
+
+    assert both.output_path == tmp_path / "both_峰表.xlsx"
+    assert both.peak_output_path == tmp_path / "both_峰表.xlsx"
+    assert both.pattern_output_path == tmp_path / "both_谱线.xlsx"
+    assert both.peak_output_path.exists()
+    assert both.pattern_output_path.exists()
+    assert not both_base.exists()
 
 
 def test_simple_gui_export_can_write_publication_vector_sidecars(tmp_path: Path) -> None:

@@ -5,8 +5,13 @@ from pathlib import Path
 from typing import Sequence
 
 from .constants import DEFAULT_XRD_SOURCE, XRD_SOURCE_PRESETS
-from .exporters import export_peak_reference_csv, export_cif2peaks_json, export_cif2peaks_workbook
-from .models import Cif2PeaksExportPayload, Cif2PeaksSettings
+from .exporters import (
+    export_cif2peaks_json,
+    export_cif2peaks_pattern_workbook,
+    export_cif2peaks_workbook,
+    export_peak_reference_csv,
+)
+from .models import Cif2PeaksExportPayload, Cif2PeaksSettings, XrdAxisMode
 from .service import Cif2PeaksService
 
 
@@ -29,16 +34,38 @@ def collect_cif_paths(inputs: Sequence[str | Path], *, recursive: bool = True) -
     return paths
 
 
+def export_output_paths(
+    output_path: str | Path,
+    *,
+    export_peaks: bool,
+    export_patterns: bool,
+) -> tuple[Path | None, Path | None]:
+    output = Path(output_path).expanduser().resolve()
+    if export_patterns and output.suffix == "":
+        output = output.with_suffix(".xlsx")
+    if export_peaks and export_patterns:
+        return output.with_name(f"{output.stem}_峰表{output.suffix}"), output.with_name(f"{output.stem}_谱线.xlsx")
+    if export_patterns:
+        return None, output.with_name(f"{output.stem}_谱线.xlsx")
+    return output, None
+
+
 def batch_export_peak_reference(
     inputs: Sequence[str | Path],
     output_path: str | Path,
     settings: Cif2PeaksSettings | None = None,
     *,
     recursive: bool = True,
+    export_peaks: bool = True,
+    export_patterns: bool = False,
+    pattern_axis: XrdAxisMode = "two_theta",
 ) -> list:
+    if not export_peaks and not export_patterns:
+        raise ValueError("At least one export type must be enabled.")
+
     cif_paths = collect_cif_paths(inputs, recursive=recursive)
     if not cif_paths:
-        raise FileNotFoundError("未找到 CIF 文件。")
+        raise FileNotFoundError("No CIF files were found.")
 
     service = Cif2PeaksService()
     resolved_settings = settings or Cif2PeaksSettings()
@@ -46,13 +73,17 @@ def batch_export_peak_reference(
     service.simulate_phases(phases, resolved_settings)
     payload = Cif2PeaksExportPayload(phases, resolved_settings)
 
-    output = Path(output_path).expanduser().resolve()
-    output.parent.mkdir(parents=True, exist_ok=True)
-    if output.suffix.lower() == ".xlsx":
-        export_cif2peaks_workbook(payload, output)
-        export_cif2peaks_json(payload, output.with_suffix(".json"))
-    else:
-        export_peak_reference_csv(payload, output)
+    peak_output, pattern_output = export_output_paths(output_path, export_peaks=export_peaks, export_patterns=export_patterns)
+    if peak_output is not None:
+        peak_output.parent.mkdir(parents=True, exist_ok=True)
+        if peak_output.suffix.lower() == ".xlsx":
+            export_cif2peaks_workbook(payload, peak_output)
+            export_cif2peaks_json(payload, peak_output.with_suffix(".json"))
+        else:
+            export_peak_reference_csv(payload, peak_output)
+    if pattern_output is not None:
+        pattern_output.parent.mkdir(parents=True, exist_ok=True)
+        export_cif2peaks_pattern_workbook(payload, pattern_output, axis_mode=pattern_axis)
     return phases
 
 
@@ -75,7 +106,7 @@ def _settings_from_args(args: argparse.Namespace) -> Cif2PeaksSettings:
 
 def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
-        description="Batch-export phase/hkl/d/2theta peak reference tables from CIF files.",
+        description="Batch-export theoretical powder XRD peak tables and pattern data from CIF files.",
     )
     parser.add_argument("inputs", nargs="+", help="CIF files or directories containing CIF files.")
     parser.add_argument("-o", "--output", default="cif2peaks_peak_reference.xlsx", help="Output .xlsx or .csv path.")
@@ -85,13 +116,27 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument("--wavelength-A", type=float, default=None, help="Use a custom wavelength in Angstrom.")
     parser.add_argument("--two-theta-min", type=float, default=0.0, help="Minimum 2theta in degrees.")
     parser.add_argument("--two-theta-max", type=float, default=180.0, help="Maximum 2theta in degrees.")
+    parser.add_argument("--export-peaks", dest="export_peaks", action="store_true", default=True, help="Export peak reference table.")
+    parser.add_argument("--no-export-peaks", dest="export_peaks", action="store_false", help="Do not export peak reference table.")
+    parser.add_argument("--export-patterns", action="store_true", help="Export continuous simulated XRD pattern workbook.")
+    parser.add_argument("--pattern-axis", choices=("two_theta", "d_spacing", "q", "g"), default="two_theta", help="X axis for pattern workbook.")
     args = parser.parse_args(argv)
 
     settings = _settings_from_args(args)
-    phases = batch_export_peak_reference(args.inputs, args.output, settings, recursive=not args.no_recursive)
+    phases = batch_export_peak_reference(
+        args.inputs,
+        args.output,
+        settings,
+        recursive=not args.no_recursive,
+        export_peaks=args.export_peaks,
+        export_patterns=args.export_patterns,
+        pattern_axis=args.pattern_axis,
+    )
     peak_count = sum(0 if phase.result is None else len(phase.result.peaks) for phase in phases)
     failed = [phase.cif_path.name for phase in phases if phase.error]
-    print(f"Exported {peak_count} peaks from {len(phases)} CIF files to {Path(args.output).resolve()}")
+    peak_output, pattern_output = export_output_paths(args.output, export_peaks=args.export_peaks, export_patterns=args.export_patterns)
+    outputs = "; ".join(str(path) for path in (peak_output, pattern_output) if path is not None)
+    print(f"Exported {peak_count} peaks from {len(phases)} CIF files to {outputs}")
     if failed:
         print("Failed CIF files: " + ", ".join(failed))
     return 0 if peak_count else 1

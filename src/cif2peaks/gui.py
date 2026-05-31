@@ -8,9 +8,10 @@ import sys
 from collections.abc import Callable
 from typing import Mapping, Sequence
 
+from .batch import export_output_paths
 from .constants import DEFAULT_XRD_SOURCE, X_RAY_ENERGY_WAVELENGTH_KEV_A
-from .exporters import export_cif2peaks_workbook
-from .models import Cif2PeaksExportPayload, Cif2PeaksSettings
+from .exporters import export_cif2peaks_pattern_workbook, export_cif2peaks_workbook
+from .models import Cif2PeaksExportPayload, Cif2PeaksSettings, XrdAxisMode
 from .plotting import (
     FIGURE_EXPORT_PRESETS,
     export_xrd_pattern_eps,
@@ -28,6 +29,8 @@ class SimpleGuiExportResult:
     output_path: Path
     total_peaks: int
     phase_rows: list[tuple[str, str, str, int, str]]
+    peak_output_path: Path | None = None
+    pattern_output_path: Path | None = None
     publication_figure_paths: list[Path] = field(default_factory=list)
 
 
@@ -79,6 +82,9 @@ GUI_TOOLTIP_KEYS = {
     "xray_preset": "tooltip_xray_preset",
     "manual_energy": "tooltip_manual_energy",
     "d_range": "tooltip_d_range",
+    "export_peaks": "tooltip_export_peaks",
+    "export_patterns": "tooltip_export_patterns",
+    "pattern_axis": "tooltip_pattern_axis",
     "publication_export": "tooltip_publication_export",
     "figure_preset": "tooltip_figure_preset",
     "export_excel": "tooltip_export_excel",
@@ -301,6 +307,27 @@ GUI_XRAY_PRESETS = {
     "83 keV": 83.0,
 }
 
+GUI_TEXT["zh"].update(
+    {
+        "export_peaks": "导出峰位表",
+        "export_patterns": "导出XRD谱线",
+        "pattern_axis": "谱线 x轴",
+        "tooltip_export_peaks": "导出原有 hkl/d/2θ 峰位表。",
+        "tooltip_export_patterns": "导出每个 CIF 的连续模拟 XRD 谱线 x-y 数据到单独 Excel。",
+        "tooltip_pattern_axis": "选择谱线数据表中 x 列使用 2θ、d、q 或 g。",
+    }
+)
+GUI_TEXT["en"].update(
+    {
+        "export_peaks": "Export peak table",
+        "export_patterns": "Export XRD pattern data",
+        "pattern_axis": "Pattern x axis",
+        "tooltip_export_peaks": "Export the hkl/d/2theta peak reference workbook.",
+        "tooltip_export_patterns": "Export continuous simulated XRD x-y profile data for each CIF to a separate Excel workbook.",
+        "tooltip_pattern_axis": "Choose whether the pattern data x column uses 2theta, d, q, or g.",
+    }
+)
+
 
 def _gui_text(language: str, key: str, **kwargs: object) -> str:
     language_key = language if language in GUI_TEXT else "zh"
@@ -315,6 +342,20 @@ def should_clear_gui_files(file_count: int, confirm: Callable[[], bool]) -> bool
 def should_overwrite_gui_output(output_path: str | Path, confirm: Callable[[Path], bool]) -> bool:
     path = normalize_xlsx_output_path(output_path)
     return not path.exists() or confirm(path)
+
+
+def should_overwrite_gui_outputs(output_paths: Sequence[str | Path | None], confirm: Callable[[Path], bool]) -> bool:
+    seen: set[Path] = set()
+    for output_path in output_paths:
+        if output_path is None:
+            continue
+        path = normalize_xlsx_output_path(output_path)
+        if path in seen:
+            continue
+        seen.add(path)
+        if path.exists() and not confirm(path):
+            return False
+    return True
 
 
 def _resolved_display_name_lookup(display_names: Mapping[str | Path, str] | None) -> dict[Path, str]:
@@ -739,9 +780,14 @@ def run_simple_gui_export(
     d_min_A: str | float | None = None,
     d_max_A: str | float | None = None,
     display_names: Mapping[str | Path, str] | None = None,
+    export_peaks: bool = True,
+    export_patterns: bool = False,
+    pattern_axis: XrdAxisMode = "two_theta",
     export_publication_svg: bool = False,
     publication_preset: str = "publication",
 ) -> SimpleGuiExportResult:
+    if not export_peaks and not export_patterns:
+        raise ValueError("At least one export type must be enabled.")
     resolved_cifs = [Path(path).expanduser().resolve() for path in cif_paths]
     if not resolved_cifs:
         raise ValueError("Select at least one CIF file.")
@@ -759,18 +805,27 @@ def run_simple_gui_export(
     service.simulate_phases(phases, settings)
 
     output = normalize_xlsx_output_path(output_path)
-    output.parent.mkdir(parents=True, exist_ok=True)
-    export_cif2peaks_workbook(Cif2PeaksExportPayload(phases, settings), output)
+    peak_output, pattern_output = export_output_paths(output, export_peaks=export_peaks, export_patterns=export_patterns)
+    payload = Cif2PeaksExportPayload(phases, settings)
+    if peak_output is not None:
+        peak_output.parent.mkdir(parents=True, exist_ok=True)
+        export_cif2peaks_workbook(payload, peak_output)
+    if pattern_output is not None:
+        pattern_output.parent.mkdir(parents=True, exist_ok=True)
+        export_cif2peaks_pattern_workbook(payload, pattern_output, axis_mode=pattern_axis)
+    primary_output = peak_output or pattern_output
+    if primary_output is None:
+        raise ValueError("At least one export type must be enabled.")
     publication_figure_paths: list[Path] = []
     if export_publication_svg:
         for index, phase in enumerate(phases, start=1):
             if phase.result is None:
                 continue
-            svg_path = _publication_figure_path(output, phase.phase_name, index, ".svg")
-            pdf_path = _publication_figure_path(output, phase.phase_name, index, ".pdf")
-            eps_path = _publication_figure_path(output, phase.phase_name, index, ".eps")
-            png_path = _publication_figure_path(output, phase.phase_name, index, ".png")
-            tiff_path = _publication_figure_path(output, phase.phase_name, index, ".tif")
+            svg_path = _publication_figure_path(primary_output, phase.phase_name, index, ".svg")
+            pdf_path = _publication_figure_path(primary_output, phase.phase_name, index, ".pdf")
+            eps_path = _publication_figure_path(primary_output, phase.phase_name, index, ".eps")
+            png_path = _publication_figure_path(primary_output, phase.phase_name, index, ".png")
+            tiff_path = _publication_figure_path(primary_output, phase.phase_name, index, ".tif")
             export_xrd_pattern_svg(phase.result, svg_path, title=phase.phase_name, preset_name=publication_preset)
             export_xrd_pattern_pdf(phase.result, pdf_path, title=phase.phase_name, preset_name=publication_preset)
             export_xrd_pattern_eps(phase.result, eps_path, title=phase.phase_name, preset_name=publication_preset)
@@ -791,9 +846,11 @@ def run_simple_gui_export(
             )
         )
     return SimpleGuiExportResult(
-        output_path=output,
+        output_path=primary_output,
         total_peaks=sum(row[3] for row in phase_rows),
         phase_rows=phase_rows,
+        peak_output_path=peak_output,
+        pattern_output_path=pattern_output,
         publication_figure_paths=publication_figure_paths,
     )
 
@@ -815,6 +872,8 @@ def simple_export_message_lines(result: SimpleGuiExportResult, language: str = "
             "请打开 Summary 和 使用说明 查看 CIF 问题。",
         ]
     output_lines = [*summary_lines, "", str(result.output_path)]
+    if result.pattern_output_path is not None and result.pattern_output_path != result.output_path:
+        output_lines.append(str(result.pattern_output_path))
     if result.publication_figure_paths:
         output_lines.append("")
         output_lines.append("Publication figure(s):" if language == "en" else "论文级图：")
@@ -939,6 +998,9 @@ def _launch_tk_app(initial_paths: Sequence[str | Path] = ()) -> None:
     energy_var = tk.StringVar(value="")
     min_var = tk.StringVar(value="")
     max_var = tk.StringVar(value="")
+    export_peaks_var = tk.BooleanVar(value=True)
+    export_patterns_var = tk.BooleanVar(value=False)
+    pattern_axis_var = tk.StringVar(value="two_theta")
     publication_svg_var = tk.BooleanVar(value=False)
     publication_preset_var = tk.StringVar(value="publication")
     output_var = tk.StringVar(value=str(suggest_output_path(selected_paths)))
@@ -1274,10 +1336,24 @@ def _launch_tk_app(initial_paths: Sequence[str | Path] = ()) -> None:
     d_max_entry.grid(row=0, column=2, sticky="w")
     d_range_unit_label = ttk.Label(range_frame, style="Card.TLabel")
     d_range_unit_label.grid(row=0, column=3, sticky="w")
+    export_peaks_check = ttk.Checkbutton(settings_panel, variable=export_peaks_var)
+    export_peaks_check.grid(row=6, column=0, columnspan=2, sticky="w", pady=(8, 0))
+    export_patterns_check = ttk.Checkbutton(settings_panel, variable=export_patterns_var)
+    export_patterns_check.grid(row=7, column=0, columnspan=2, sticky="w", pady=(4, 0))
+    pattern_axis_label = ttk.Label(settings_panel, style="Card.TLabel")
+    pattern_axis_label.grid(row=8, column=0, sticky="w", pady=5)
+    pattern_axis_box = ttk.Combobox(
+        settings_panel,
+        textvariable=pattern_axis_var,
+        values=("two_theta", "d_spacing", "q", "g"),
+        state="readonly",
+        width=12,
+    )
+    pattern_axis_box.grid(row=8, column=1, sticky="w", pady=5)
     publication_svg_check = ttk.Checkbutton(settings_panel, variable=publication_svg_var)
-    publication_svg_check.grid(row=6, column=0, columnspan=2, sticky="w", pady=(8, 0))
+    publication_svg_check.grid(row=9, column=0, columnspan=2, sticky="w", pady=(8, 0))
     figure_preset_label = ttk.Label(settings_panel, style="Card.TLabel")
-    figure_preset_label.grid(row=7, column=0, sticky="w", pady=5)
+    figure_preset_label.grid(row=10, column=0, sticky="w", pady=5)
     figure_preset_box = ttk.Combobox(
         settings_panel,
         textvariable=publication_preset_var,
@@ -1285,9 +1361,9 @@ def _launch_tk_app(initial_paths: Sequence[str | Path] = ()) -> None:
         state="readonly",
         width=18,
     )
-    figure_preset_box.grid(row=7, column=1, sticky="w", pady=5)
+    figure_preset_box.grid(row=10, column=1, sticky="w", pady=5)
     settings_hint_label = ttk.Label(settings_panel, style="CardSubtitle.TLabel")
-    settings_hint_label.grid(row=8, column=0, columnspan=2, sticky="w", pady=(8, 0))
+    settings_hint_label.grid(row=11, column=0, columnspan=2, sticky="w", pady=(8, 0))
     xray_preset_var.trace_add("write", lambda *_: update_settings_summary())
     energy_var.trace_add("write", lambda *_: update_settings_summary())
     min_var.trace_add("write", lambda *_: update_settings_summary())
@@ -1401,8 +1477,13 @@ def _launch_tk_app(initial_paths: Sequence[str | Path] = ()) -> None:
     def export_now() -> None:
         nonlocal last_output_path
         try:
-            allow_overwrite = should_overwrite_gui_output(
-                output_var.get(),
+            peak_output, pattern_output = export_output_paths(
+                normalize_xlsx_output_path(output_var.get()),
+                export_peaks=export_peaks_var.get(),
+                export_patterns=export_patterns_var.get(),
+            )
+            allow_overwrite = should_overwrite_gui_outputs(
+                [peak_output, pattern_output],
                 lambda path: messagebox.askyesno(
                     _gui_text(lang(), "confirm_overwrite_title"),
                     _gui_text(lang(), "confirm_overwrite_message", path=path),
@@ -1435,6 +1516,9 @@ def _launch_tk_app(initial_paths: Sequence[str | Path] = ()) -> None:
                     d_min_A=min_var.get(),
                     d_max_A=max_var.get(),
                     display_names=display_names_snapshot,
+                    export_peaks=export_peaks_var.get(),
+                    export_patterns=export_patterns_var.get(),
+                    pattern_axis=pattern_axis_var.get(),  # type: ignore[arg-type]
                     export_publication_svg=publication_svg_var.get(),
                     publication_preset=publication_preset_var.get(),
                 )
@@ -1507,6 +1591,9 @@ def _launch_tk_app(initial_paths: Sequence[str | Path] = ()) -> None:
         xray_preset_label.configure(text=_gui_text(lang(), "xray_preset"))
         manual_energy_label.configure(text=_gui_text(lang(), "manual_energy"))
         d_range_label.configure(text=_gui_text(lang(), "d_range"))
+        export_peaks_check.configure(text=_gui_text(lang(), "export_peaks"))
+        export_patterns_check.configure(text=_gui_text(lang(), "export_patterns"))
+        pattern_axis_label.configure(text=_gui_text(lang(), "pattern_axis"))
         publication_svg_check.configure(text=_gui_text(lang(), "publication_export"))
         figure_preset_label.configure(text=_gui_text(lang(), "figure_preset"))
         d_range_to_label.configure(text=_gui_text(lang(), "to_text"))
@@ -1563,6 +1650,9 @@ def _launch_tk_app(initial_paths: Sequence[str | Path] = ()) -> None:
         (d_range_label, "d_range"),
         (d_min_entry, "d_range"),
         (d_max_entry, "d_range"),
+        (export_peaks_check, "export_peaks"),
+        (export_patterns_check, "export_patterns"),
+        (pattern_axis_box, "pattern_axis"),
         (publication_svg_check, "publication_export"),
         (figure_preset_box, "figure_preset"),
         (export_button, "export_excel"),

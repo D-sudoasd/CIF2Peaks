@@ -12,7 +12,7 @@ from zipfile import ZIP_DEFLATED, ZipFile
 import numpy as np
 
 from .hkl import format_hkl
-from .models import ExperimentalPattern, Cif2PeaksExportPayload, Cif2PeaksPeakRow, XrdPhase
+from .models import ExperimentalPattern, Cif2PeaksExportPayload, Cif2PeaksPeakRow, XrdAxisMode, XrdPhase
 from .service import phase_peak_rows
 from .utils import friendly_cif_issue_message, now_iso, package_versions
 
@@ -56,6 +56,18 @@ PEAK_REFERENCE_HEADERS = [
     "warnings",
     "space_group_from_cif",
     "space_group_detected",
+]
+
+PATTERN_PROFILE_HEADERS = [
+    "phase_name",
+    "cif_name",
+    "x_axis_mode",
+    "x",
+    "relative_intensity",
+    "two_theta_deg",
+    "d_A",
+    "q_1_over_A",
+    "g_1_over_A",
 ]
 
 BEGINNER_PEAK_HEADERS = [
@@ -181,6 +193,67 @@ def export_peak_reference_csv(payload: Cif2PeaksExportPayload, output_path: str 
         writer.writerows(peak_reference_rows(payload.phases))
 
 
+def _phase_wavelength_A(phase: XrdPhase, fallback: float) -> float:
+    if phase.result is not None:
+        value = phase.result.metadata.get("wavelength_A")
+        if isinstance(value, (int, float, np.integer, np.floating)) and np.isfinite(float(value)) and float(value) > 0:
+            return float(value)
+    return float(fallback)
+
+
+def _pattern_coordinate_values(two_theta_deg: float, wavelength_A: float) -> tuple[float, float, float]:
+    theta_rad = np.deg2rad(float(two_theta_deg) / 2.0)
+    sin_theta = float(np.sin(theta_rad))
+    q_invA = 4.0 * np.pi * sin_theta / wavelength_A
+    if sin_theta <= 0.0:
+        return float("inf"), float(q_invA), 0.0
+    d_A = wavelength_A / (2.0 * sin_theta)
+    return float(d_A), float(q_invA), float(1.0 / d_A)
+
+
+def _selected_pattern_x(axis_mode: XrdAxisMode, two_theta_deg: float, d_A: float, q_invA: float, g_invA: float) -> float:
+    if axis_mode == "d_spacing":
+        return d_A
+    if axis_mode == "q":
+        return q_invA
+    if axis_mode == "g":
+        return g_invA
+    return two_theta_deg
+
+
+def _finite_or_blank(value: float) -> float | str:
+    return float(value) if np.isfinite(float(value)) else ""
+
+
+def pattern_profile_rows(payload: Cif2PeaksExportPayload, axis_mode: XrdAxisMode = "two_theta") -> list[dict[str, Any]]:
+    rows: list[dict[str, Any]] = []
+    for phase in payload.phases:
+        result = phase.result
+        if result is None:
+            continue
+        wavelength_A = _phase_wavelength_A(phase, payload.settings.wavelength_A)
+        for two_theta, intensity in zip(result.two_theta_grid, result.intensity_profile, strict=True):
+            two_theta_deg = float(two_theta)
+            d_A, q_invA, g_invA = _pattern_coordinate_values(two_theta_deg, wavelength_A)
+            x_value = _selected_pattern_x(axis_mode, two_theta_deg, d_A, q_invA, g_invA)
+            if not np.isfinite(float(x_value)):
+                continue
+            rows.append(
+                {
+                    "phase_name": phase.phase_name,
+                    "cif_name": phase.cif_path.name,
+                    "x_axis_mode": axis_mode,
+                    "x": float(x_value),
+                    "relative_intensity": float(intensity),
+                    "two_theta_deg": two_theta_deg,
+                    "d_A": _finite_or_blank(d_A),
+                    "q_1_over_A": _finite_or_blank(q_invA),
+                    "g_1_over_A": _finite_or_blank(g_invA),
+                }
+            )
+    return rows
+
+
 def _summary_rows(payload: Cif2PeaksExportPayload) -> list[list[Any]]:
     rows: list[list[Any]] = [
         ["CIF2Peaks export", "theoretical powder XRD simulation; not experimental fitting"],
@@ -232,6 +305,12 @@ def _summary_rows(payload: Cif2PeaksExportPayload) -> list[list[Any]]:
                 " | ".join(phase.warning_messages),
             ]
         )
+    return rows
+
+
+def _pattern_summary_rows(payload: Cif2PeaksExportPayload, axis_mode: XrdAxisMode) -> list[list[Any]]:
+    rows = _summary_rows(payload)
+    rows.insert(14, ["pattern_axis_mode", axis_mode])
     return rows
 
 
@@ -414,6 +493,8 @@ def _table_column_widths(headers: list[Any]) -> list[int]:
         "two_theta_current_deg": 20,
         "two_theta_deg": 16,
         "two_theta_cu_ka_deg": 20,
+        "x_axis_mode": 16,
+        "x": 14,
         "relative_intensity": 18,
         "multiplicity": 14,
         "warnings": 42,
@@ -444,6 +525,7 @@ def _is_table_sheet(rows: list[list[Any]]) -> bool:
     return (
         headers == PEAK_HEADERS
         or headers == BEGINNER_PEAK_HEADERS
+        or headers == PATTERN_PROFILE_HEADERS
         or headers == ["pattern_label", "source_file", "axis_mode", "x", "relative_intensity"]
     )
 
@@ -539,6 +621,10 @@ def _safe_sheet_name(name: str, used: set[str]) -> str:
 
 def _peak_rows_for_sheet(rows: list[dict[str, Any]]) -> list[list[Any]]:
     return [PEAK_HEADERS, *[[row.get(header, "") for header in PEAK_HEADERS] for row in rows]]
+
+
+def _pattern_rows_for_sheet(rows: list[dict[str, Any]]) -> list[list[Any]]:
+    return [PATTERN_PROFILE_HEADERS, *[[row.get(header, "") for header in PATTERN_PROFILE_HEADERS] for row in rows]]
 
 
 def _beginner_peak_rows_for_sheet(rows: list[dict[str, Any]]) -> list[list[Any]]:
@@ -648,6 +734,89 @@ def export_cif2peaks_workbook(payload: Cif2PeaksExportPayload, output_path: str 
             '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
             '<cp:coreProperties xmlns:cp="http://schemas.openxmlformats.org/package/2006/metadata/core-properties" '
             'xmlns:dc="http://purl.org/dc/elements/1.1/"><dc:title>CIF2Peaks export</dc:title></cp:coreProperties>',
+        )
+        archive.writestr(
+            "docProps/app.xml",
+            '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+            '<Properties xmlns="http://schemas.openxmlformats.org/officeDocument/2006/extended-properties">'
+            "<Application>CIF2Peaks</Application></Properties>",
+        )
+
+
+def export_cif2peaks_pattern_workbook(
+    payload: Cif2PeaksExportPayload,
+    output_path: str | Path,
+    *,
+    axis_mode: XrdAxisMode = "two_theta",
+) -> None:
+    sheets: list[tuple[str, list[list[Any]], list[int] | None]] = []
+    used: set[str] = set()
+    sheets.append((_safe_sheet_name("Summary", used), _pattern_summary_rows(payload, axis_mode), None))
+    sheets.append((_safe_sheet_name("Combined Patterns", used), _pattern_rows_for_sheet(pattern_profile_rows(payload, axis_mode)), None))
+    for phase in payload.phases:
+        sheets.append((_safe_sheet_name(phase.phase_name, used), _pattern_rows_for_sheet(pattern_profile_rows(Cif2PeaksExportPayload([phase], payload.settings), axis_mode)), None))
+
+    with ZipFile(Path(output_path), "w", ZIP_DEFLATED) as archive:
+        content_overrides = [
+            '<Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>',
+            '<Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/>',
+            '<Override PartName="/docProps/core.xml" ContentType="application/vnd.openxmlformats-package.core-properties+xml"/>',
+            '<Override PartName="/docProps/app.xml" ContentType="application/vnd.openxmlformats-officedocument.extended-properties+xml"/>',
+        ]
+        for index in range(1, len(sheets) + 1):
+            content_overrides.append(
+                f'<Override PartName="/xl/worksheets/sheet{index}.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>'
+            )
+        archive.writestr(
+            "[Content_Types].xml",
+            '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+            '<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">'
+            '<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>'
+            '<Default Extension="xml" ContentType="application/xml"/>'
+            f'{"".join(content_overrides)}'
+            "</Types>",
+        )
+        archive.writestr(
+            "_rels/.rels",
+            '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+            '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
+            '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/>'
+            '<Relationship Id="rId2" Type="http://schemas.openxmlformats.org/package/2006/relationships/metadata/core-properties" Target="docProps/core.xml"/>'
+            '<Relationship Id="rId3" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/extended-properties" Target="docProps/app.xml"/>'
+            "</Relationships>",
+        )
+        sheet_defs = []
+        rel_defs = []
+        for index, (name, rows, data_row_style_ids) in enumerate(sheets, start=1):
+            sheet_defs.append(f'<sheet name="{html.escape(name)}" sheetId="{index}" r:id="rId{index}"/>')
+            rel_defs.append(
+                f'<Relationship Id="rId{index}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet{index}.xml"/>'
+            )
+            archive.writestr(f"xl/worksheets/sheet{index}.xml", _sheet_xml(rows, data_row_style_ids))
+        style_rel_id = len(sheets) + 1
+        rel_defs.append(
+            f'<Relationship Id="rId{style_rel_id}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/>'
+        )
+        archive.writestr("xl/styles.xml", _xlsx_styles_xml())
+        archive.writestr(
+            "xl/workbook.xml",
+            '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+            '<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" '
+            'xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">'
+            f'<bookViews><workbookView activeTab="{len(sheets) - 1}"/></bookViews>'
+            f'<sheets>{"".join(sheet_defs)}</sheets></workbook>',
+        )
+        archive.writestr(
+            "xl/_rels/workbook.xml.rels",
+            '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+            '<Relationships xmlns="http://schemas.openxmlformats.org/officeDocument/2006/relationships">'
+            f'{"".join(rel_defs)}</Relationships>',
+        )
+        archive.writestr(
+            "docProps/core.xml",
+            '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+            '<cp:coreProperties xmlns:cp="http://schemas.openxmlformats.org/package/2006/metadata/core-properties" '
+            'xmlns:dc="http://purl.org/dc/elements/1.1/"><dc:title>CIF2Peaks pattern export</dc:title></cp:coreProperties>',
         )
         archive.writestr(
             "docProps/app.xml",
