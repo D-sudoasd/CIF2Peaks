@@ -986,23 +986,44 @@ def test_beginner_gui_manual_energy_overrides_selected_preset() -> None:
 
 
 def test_beginner_gui_suggests_clear_output_path(tmp_path: Path) -> None:
-    from cif2peaks.gui import suggest_output_path
+    from cif2peaks.gui import next_gui_output_path, suggest_output_path
 
     single = suggest_output_path([tmp_path / "Ti.cif"])
     many = suggest_output_path([tmp_path / "Ti.cif", tmp_path / "TiB.cif"])
 
     assert single == tmp_path / "Ti_CIF2Peaks峰表.xlsx"
     assert many == tmp_path / "CIF2Peaks峰表_2个CIF.xlsx"
+    assert next_gui_output_path(tmp_path / "custom.xlsx", [tmp_path / "Ti.cif"], user_customized=False) == single
+    assert next_gui_output_path(tmp_path / "custom.xlsx", [tmp_path / "Ti.cif"], user_customized=True) == tmp_path / "custom.xlsx"
 
 
 def test_beginner_gui_turns_common_errors_into_chinese_guidance() -> None:
     from cif2peaks.gui import friendly_error_message
 
-    assert "请先添加" in friendly_error_message(ValueError("Select at least one CIF file."))
+    no_file_message = friendly_error_message(ValueError("Select at least one CIF file."))
+    assert "哪里出错" in no_file_message
+    assert "可能原因" in no_file_message
+    assert "下一步" in no_file_message
+    assert "请先" in no_file_message
     assert "数字" in friendly_error_message(ValueError("2theta min must be a number."))
     assert "能量" in friendly_error_message(ValueError("X-ray energy keV must be greater than 0."))
     assert "d 范围" in friendly_error_message(ValueError("d range has no observable first-order Bragg peaks for this wavelength."))
-    assert "被 Excel 打开" in friendly_error_message(PermissionError("locked"))
+    assert "Excel" in friendly_error_message(PermissionError("locked"))
+    assert "重新选择" in friendly_error_message(FileNotFoundError("Missing CIF file(s): old.cif"))
+    fallback_message = friendly_error_message(RuntimeError("unexpected failure"))
+    assert "处理失败" in fallback_message
+    assert "unexpected failure" in fallback_message
+
+
+def test_beginner_gui_can_render_error_guidance_in_english() -> None:
+    from cif2peaks.gui import friendly_error_message
+
+    message = friendly_error_message(ValueError("Select at least one CIF file."), language="en")
+
+    assert "Problem:" in message
+    assert "Likely cause:" in message
+    assert "Next step:" in message
+    assert "Add files" in message
 
 
 def test_beginner_gui_previews_cif_metadata_before_export(tmp_path: Path) -> None:
@@ -1113,6 +1134,7 @@ def test_gui_language_pack_covers_primary_controls() -> None:
         "manual_energy",
         "d_range",
         "preview_panel",
+        "activity_log_title",
         "tree_display_name",
         "tree_formula",
         "tree_space_group",
@@ -1125,12 +1147,54 @@ def test_gui_language_pack_covers_primary_controls() -> None:
         "parameters_title",
         "preview_title",
         "status_ready",
+        "publication_export",
+        "figure_preset",
     }
 
     assert set(SUPPORTED_GUI_LANGUAGES) == {"zh", "en"}
     for language in SUPPORTED_GUI_LANGUAGES:
         missing = [key for key in sorted(required_keys) if not GUI_TEXT[language].get(key)]
         assert not missing
+    assert GUI_TEXT["zh"]["export_excel"] == "导出结果"
+    assert GUI_TEXT["zh"]["add_files"] == "添加 CIF"
+    assert GUI_TEXT["zh"]["clear_files"] == "清空列表"
+    assert GUI_TEXT["zh"]["choose_output"] == "选择输出"
+    assert GUI_TEXT["zh"]["apply_display_name"] == "应用相名"
+    assert GUI_TEXT["zh"]["activity_log_title"] == "运行记录"
+    assert "图像选项" in GUI_TEXT["zh"]["ready_to_export"]
+    assert GUI_TEXT["en"]["export_excel"] == "Export results"
+    assert GUI_TEXT["en"]["add_files"] == "Add CIFs"
+    assert GUI_TEXT["en"]["clear_files"] == "Clear list"
+    assert GUI_TEXT["en"]["choose_output"] == "Choose output"
+    assert GUI_TEXT["en"]["apply_display_name"] == "Apply phase name"
+    assert GUI_TEXT["en"]["activity_log_title"] == "Activity log"
+    assert "figure options" in GUI_TEXT["en"]["ready_to_export"]
+
+
+def test_gui_activity_log_language_pack_covers_user_feedback_events() -> None:
+    from cif2peaks.gui import GUI_TEXT, SUPPORTED_GUI_LANGUAGES
+
+    required_log_keys = {
+        "log_ready",
+        "log_added",
+        "log_add_none",
+        "log_cleared",
+        "log_preview_reading",
+        "log_preview_ready",
+        "log_preview_with_failures",
+        "log_exporting",
+        "log_export_done",
+        "log_export_failed",
+        "log_export_cancelled",
+    }
+
+    for language in SUPPORTED_GUI_LANGUAGES:
+        missing = [key for key in sorted(required_log_keys) if not GUI_TEXT[language].get(key)]
+        assert not missing
+    assert "加入" in GUI_TEXT["zh"]["log_added"]
+    assert "added" in GUI_TEXT["en"]["log_added"]
+    assert "导出失败" in GUI_TEXT["zh"]["log_export_failed"]
+    assert "Export failed" in GUI_TEXT["en"]["log_export_failed"]
 
 
 def test_gui_exposes_minimal_workbench_theme_contract() -> None:
@@ -1139,11 +1203,222 @@ def test_gui_exposes_minimal_workbench_theme_contract() -> None:
     assert GUI_WORKBENCH_LAYOUT["geometry"] == "1200x760"
     assert GUI_WORKBENCH_LAYOUT["minsize"] == (1040, 680)
     assert GUI_WORKBENCH_LAYOUT["sidebar_width"] == 330
+    assert GUI_WORKBENCH_LAYOUT["scrollable_main"] is True
     assert GUI_THEME["surface"] == "#eef3f8"
     assert GUI_THEME["panel"] == "#ffffff"
     assert GUI_THEME["primary"] == "#1f5eff"
     assert GUI_THEME["border"] == "#d7e0ea"
     assert GUI_THEME["text"] == "#172033"
+
+
+def test_gui_defines_tooltips_and_clear_confirmation_contract(tmp_path: Path) -> None:
+    from cif2peaks.gui import (
+        GUI_PUBLICATION_PRESET_LABELS,
+        GUI_TEXT,
+        GUI_TOOLTIP_KEYS,
+        SUPPORTED_GUI_LANGUAGES,
+        should_clear_gui_files,
+        should_overwrite_gui_output,
+    )
+    from cif2peaks.plotting import FIGURE_EXPORT_PRESETS
+
+    expected_tooltip_roles = {
+        "add_files",
+        "add_folder",
+        "remove_selected",
+        "clear_files",
+        "display_name",
+        "output_file",
+        "choose_output",
+        "xray_preset",
+        "manual_energy",
+        "d_range",
+        "publication_export",
+        "figure_preset",
+        "export_excel",
+        "open_excel",
+    }
+
+    assert expected_tooltip_roles.issubset(GUI_TOOLTIP_KEYS)
+    assert set(GUI_PUBLICATION_PRESET_LABELS) == set(FIGURE_EXPORT_PRESETS)
+    assert GUI_PUBLICATION_PRESET_LABELS[0] == "publication"
+    for language in SUPPORTED_GUI_LANGUAGES:
+        for tooltip_key in GUI_TOOLTIP_KEYS.values():
+            assert GUI_TEXT[language].get(tooltip_key)
+        assert GUI_TEXT[language].get("confirm_clear_title")
+        assert GUI_TEXT[language].get("confirm_clear_message")
+        assert GUI_TEXT[language].get("confirm_overwrite_title")
+        assert GUI_TEXT[language].get("confirm_overwrite_message")
+        assert GUI_TEXT[language].get("export_cancelled_overwrite")
+        assert "PNG" in GUI_TEXT[language]["publication_export"]
+        assert "TIFF" in GUI_TEXT[language]["tooltip_publication_export"]
+        assert GUI_TEXT[language].get("tooltip_figure_preset")
+        assert "Excel" in GUI_TEXT[language]["tooltip_export_excel"]
+        assert "图" in GUI_TEXT[language]["tooltip_export_excel"] or "figure" in GUI_TEXT[language]["tooltip_export_excel"]
+
+    calls: list[int] = []
+
+    def deny_clear() -> bool:
+        calls.append(1)
+        return False
+
+    assert should_clear_gui_files(0, deny_clear)
+    assert calls == []
+    assert not should_clear_gui_files(2, deny_clear)
+    assert calls == [1]
+    assert should_clear_gui_files(2, lambda: True)
+
+    missing_output = tmp_path / "missing_gui_output.xlsx"
+    assert should_overwrite_gui_output(missing_output, lambda _path: False)
+    existing_output = tmp_path / "existing_gui_output.xlsx"
+    existing_output.write_text("old workbook placeholder", encoding="utf-8")
+    overwrite_calls: list[Path] = []
+
+    assert not should_overwrite_gui_output(existing_output, lambda path: overwrite_calls.append(path) or False)
+    assert overwrite_calls == [existing_output.resolve()]
+    assert should_overwrite_gui_output(existing_output, lambda _path: True)
+
+
+def test_publication_figure_presets_cover_common_export_contexts() -> None:
+    from cif2peaks.plotting import FIGURE_EXPORT_PRESETS, PUBLICATION_EXPORT_FORMATS
+
+    assert set(FIGURE_EXPORT_PRESETS) == {
+        "single_column",
+        "double_column",
+        "presentation",
+        "raw_inspection",
+        "publication",
+    }
+    assert PUBLICATION_EXPORT_FORMATS == ("svg", "pdf", "eps", "png", "tif")
+    publication = FIGURE_EXPORT_PRESETS["publication"]
+    assert publication.dpi >= 600
+    assert publication.width_in > 0
+    assert publication.height_in > 0
+    assert publication.line_width_pt <= 1.4
+    assert publication.axis_width_pt <= 1.0
+    assert publication.constrained_layout
+    assert "Arial" in publication.font_family
+    assert publication.color_cycle[0].startswith("#")
+
+
+def test_publication_svg_export_writes_clean_xrd_vector_plot(tmp_path: Path) -> None:
+    from cif2peaks.plotting import export_xrd_pattern_svg
+
+    service = Cif2PeaksService()
+    phase = service.load_phase(TI_BETA_CIF)
+    service.simulate_phase(phase, Cif2PeaksSettings())
+    assert phase.result is not None
+    output = tmp_path / "ti_beta_publication.svg"
+
+    export_xrd_pattern_svg(phase.result, output, title="Ti beta reference", preset_name="publication")
+
+    svg = output.read_text(encoding="utf-8")
+    assert svg.startswith("<?xml")
+    assert "<svg" in svg
+    assert "viewBox=" in svg
+    assert "2θ (°)" in svg
+    assert "Intensity (a.u.)" in svg
+    assert "Ti beta reference" in svg
+    assert "<polyline" in svg
+    assert "stroke-linejoin=\"round\"" in svg
+    assert "rainbow" not in svg.lower()
+
+
+def test_publication_pdf_and_eps_exports_write_vector_xrd_plots(tmp_path: Path) -> None:
+    from cif2peaks.plotting import export_xrd_pattern_eps, export_xrd_pattern_pdf
+
+    service = Cif2PeaksService()
+    phase = service.load_phase(TI_BETA_CIF)
+    service.simulate_phase(phase, Cif2PeaksSettings())
+    assert phase.result is not None
+    pdf_output = tmp_path / "ti_beta_publication.pdf"
+    eps_output = tmp_path / "ti_beta_publication.eps"
+
+    export_xrd_pattern_pdf(phase.result, pdf_output, title="Ti beta reference", preset_name="publication")
+    export_xrd_pattern_eps(phase.result, eps_output, title="Ti beta reference", preset_name="publication")
+
+    pdf_bytes = pdf_output.read_bytes()
+    eps_text = eps_output.read_text(encoding="ascii")
+    assert pdf_bytes.startswith(b"%PDF-1.4")
+    assert b"/MediaBox" in pdf_bytes
+    assert b"2theta (deg)" in pdf_bytes
+    assert b"Intensity (a.u.)" in pdf_bytes
+    assert b"Ti beta reference" in pdf_bytes
+    assert b" m " in pdf_bytes and b" l " in pdf_bytes
+    assert eps_text.startswith("%!PS-Adobe-3.0 EPSF-3.0")
+    assert "%%BoundingBox:" in eps_text
+    assert "2theta (deg)" in eps_text
+    assert "Intensity (a.u.)" in eps_text
+    assert "Ti beta reference" in eps_text
+    assert "moveto" in eps_text and "lineto" in eps_text
+    assert "rainbow" not in eps_text.lower()
+
+
+def test_publication_png_and_tiff_exports_write_high_dpi_raster_plots(tmp_path: Path) -> None:
+    from cif2peaks.plotting import FIGURE_EXPORT_PRESETS, export_xrd_pattern_png, export_xrd_pattern_tiff
+
+    service = Cif2PeaksService()
+    phase = service.load_phase(TI_BETA_CIF)
+    service.simulate_phase(phase, Cif2PeaksSettings())
+    assert phase.result is not None
+    png_output = tmp_path / "ti_beta_publication.png"
+    tiff_output = tmp_path / "ti_beta_publication.tif"
+
+    export_xrd_pattern_png(phase.result, png_output, title="Ti beta reference", preset_name="publication")
+    export_xrd_pattern_tiff(phase.result, tiff_output, title="Ti beta reference", preset_name="publication")
+
+    png_bytes = png_output.read_bytes()
+    tiff_bytes = tiff_output.read_bytes()
+    preset = FIGURE_EXPORT_PRESETS["publication"]
+    expected_width = int(round(preset.width_in * preset.dpi))
+    expected_height = int(round(preset.height_in * preset.dpi))
+    assert png_bytes.startswith(b"\x89PNG\r\n\x1a\n")
+    assert int.from_bytes(png_bytes[16:20], "big") == expected_width
+    assert int.from_bytes(png_bytes[20:24], "big") == expected_height
+    assert b"2theta (deg)" in png_bytes
+    assert b"Intensity (a.u.)" in png_bytes
+    assert b"Ti beta reference" in png_bytes
+    assert tiff_bytes.startswith(b"II*\x00")
+    assert b"2theta (deg)" in tiff_bytes
+    assert b"Intensity (a.u.)" in tiff_bytes
+    assert b"Ti beta reference" in tiff_bytes
+    assert len(tiff_bytes) > expected_width * expected_height
+
+
+def test_publication_raster_export_can_fallback_without_optional_matplotlib(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    import cif2peaks.plotting as plotting
+
+    service = Cif2PeaksService()
+    phase = service.load_phase(TI_BETA_CIF)
+    service.simulate_phase(phase, Cif2PeaksSettings())
+    assert phase.result is not None
+    output = tmp_path / "fallback_publication.png"
+    monkeypatch.setattr(plotting, "_matplotlib_xrd_pattern", lambda *args, **kwargs: None)
+
+    plotting.export_xrd_pattern_png(phase.result, output, title="Fallback raster", preset_name="publication")
+
+    png_bytes = output.read_bytes()
+    assert png_bytes.startswith(b"\x89PNG\r\n\x1a\n")
+    assert b"Fallback raster" in png_bytes
+    assert b"XLabel\x002theta (deg)" in png_bytes
+
+
+def test_publication_raster_export_uses_optional_matplotlib_when_available() -> None:
+    pytest.importorskip("matplotlib")
+    from cif2peaks.plotting import _matplotlib_xrd_pattern
+
+    service = Cif2PeaksService()
+    phase = service.load_phase(TI_BETA_CIF)
+    service.simulate_phase(phase, Cif2PeaksSettings())
+    assert phase.result is not None
+
+    raster = _matplotlib_xrd_pattern(phase.result, title="Ti beta reference", preset_name="publication")
+
+    assert raster is not None
+    width, height, dpi, buffer, description = raster
+    assert width > 0 and height > 0 and dpi >= 300
+    assert len(buffer) == width * height * 3
+    assert "Renderer: matplotlib Agg" in description
 
 
 def test_gui_export_uses_custom_cif_display_names_and_preserves_original_cif_trace(tmp_path: Path) -> None:
@@ -1328,11 +1603,51 @@ def test_simple_gui_export_writes_xlsx_without_json_sidecar(tmp_path: Path) -> N
     assert result.output_path == output_without_suffix.with_suffix(".xlsx")
     assert result.output_path.exists()
     assert not result.output_path.with_suffix(".json").exists()
+    assert not result.output_path.with_suffix(".svg").exists()
     assert result.total_peaks > 0
     assert result.phase_rows[0][0] == "ti_beta_bcc_im3m.cif"
     assert result.phase_rows[0][1] == "Ti"
     assert result.phase_rows[0][3] == result.total_peaks
     assert result.phase_rows[0][4] == ""
+    assert result.publication_figure_paths == []
+
+
+def test_simple_gui_export_can_write_publication_vector_sidecars(tmp_path: Path) -> None:
+    from cif2peaks.gui import run_simple_gui_export, simple_export_message_lines
+
+    output = tmp_path / "gui_reference.xlsx"
+
+    result = run_simple_gui_export([TI_BETA_CIF], output, export_publication_svg=True, publication_preset="single_column")
+
+    assert result.output_path == output
+    assert result.output_path.exists()
+    assert {path.suffix for path in result.publication_figure_paths} == {".eps", ".pdf", ".png", ".svg", ".tif"}
+    svg_path = next(path for path in result.publication_figure_paths if path.suffix == ".svg")
+    pdf_path = next(path for path in result.publication_figure_paths if path.suffix == ".pdf")
+    eps_path = next(path for path in result.publication_figure_paths if path.suffix == ".eps")
+    png_path = next(path for path in result.publication_figure_paths if path.suffix == ".png")
+    tiff_path = next(path for path in result.publication_figure_paths if path.suffix == ".tif")
+    assert svg_path.exists()
+    assert pdf_path.exists()
+    assert eps_path.exists()
+    assert png_path.exists()
+    assert tiff_path.exists()
+    assert svg_path.parent == output.parent
+    svg = svg_path.read_text(encoding="utf-8")
+    assert "2θ (°)" in svg
+    assert "Intensity (a.u.)" in svg
+    assert "ti_beta_bcc_im3m.cif" in svg
+    assert pdf_path.read_bytes().startswith(b"%PDF-1.4")
+    assert eps_path.read_text(encoding="ascii").startswith("%!PS-Adobe-3.0 EPSF-3.0")
+    assert png_path.read_bytes().startswith(b"\x89PNG\r\n\x1a\n")
+    assert tiff_path.read_bytes().startswith(b"II*\x00")
+    png_bytes = png_path.read_bytes()
+    assert int.from_bytes(png_bytes[16:20], "big") == 2010
+    assert int.from_bytes(png_bytes[20:24], "big") == 1410
+    message_text = "\n".join(simple_export_message_lines(result, language="en"))
+    assert "Publication figure" in message_text
+    for path in result.publication_figure_paths:
+        assert str(path) in message_text
 
 
 def test_simple_gui_export_filters_by_d_range_and_records_summary(tmp_path: Path) -> None:

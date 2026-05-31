@@ -5,7 +5,7 @@ from pathlib import Path
 
 import numpy as np
 
-from .constants import DEFAULT_XRD_WAVELENGTH_A, X_RAY_ENERGY_WAVELENGTH_KEV_A
+from .constants import DEFAULT_XRD_WAVELENGTH_A
 from .hkl import split_hkl_components
 from .models import XRDPeakRecord, XRDRequest, Cif2PeaksPeakRow, Cif2PeaksSettings, XrdPhase
 from .structure import load_crystal_model
@@ -95,14 +95,14 @@ def two_theta_for_wavelength(d_spacing_A: float, wavelength_A: float) -> float |
 
 
 def peak_to_cif2peaks_row(phase: XrdPhase, peak: XRDPeakRecord) -> Cif2PeaksPeakRow:
-    h, k, i, l = split_hkl_components(peak.hkl)
+    h, k, i, ell = split_hkl_components(peak.hkl)
     return Cif2PeaksPeakRow(
         phase_name=phase.phase_name,
         cif_name=phase.cif_path.name,
         h=h,
         k=k,
         i=i,
-        l=l,
+        l=ell,
         family_label=peak.family_label,
         d_A=peak.d_spacing_A,
         g_1_over_A=peak.g_invA,

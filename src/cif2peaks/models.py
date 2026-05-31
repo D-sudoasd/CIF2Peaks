@@ -166,7 +166,7 @@ class Cif2PeaksPeakRow:
     h: int
     k: int
     i: int | None
-    l: int
+    l: int  # noqa: E741 - hkl uses the conventional Miller index name.
     family_label: str
     d_A: float
     g_1_over_A: float

@@ -17,7 +17,7 @@ def format_hkl(values: Iterable[object]) -> str:
 def split_hkl_components(values: Iterable[object]) -> tuple[int, int, int | None, int]:
     hkl = normalize_hkl(values)
     if len(hkl) == 3:
-        h, k, l = hkl
-        return h, k, None, l
-    h, k, i, l = hkl
-    return h, k, i, l
+        h, k, ell = hkl
+        return h, k, None, ell
+    h, k, i, ell = hkl
+    return h, k, i, ell
