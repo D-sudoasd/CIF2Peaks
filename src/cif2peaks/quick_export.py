@@ -42,7 +42,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         return 1
 
     print("\n".join(quick_export_message_lines(result)))
-    for cif_name, formula, space_group, peak_count, warning in result.phase_rows:
+    for row in result.phase_rows:
+        cif_name, formula, space_group, peak_count, warning = row[:5]
         suffix = f"；{warning}" if warning else ""
         print(f"- {cif_name}: {formula}, {space_group}, {peak_count} peaks{suffix}")
     return 0

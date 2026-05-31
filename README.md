@@ -13,9 +13,12 @@ into Excel for follow-up work in Excel, Origin, Python, or lab notebooks.
 - Export one combined Excel workbook with:
   - `Summary`
   - `Combined Peaks`
+  - `Elastic Constants`
   - one sheet per phase
 - Use the desktop GUI for non-programming workflows.
 - Drag CIF files or CIF folders directly into the GUI window.
+- Optionally enter per-phase elastic constants (`C11,C12,C44` or a full 6x6
+  `Cij` matrix) and export hkl-normal Young's modulus columns.
 - Use the CLI for reproducible batch processing.
 - Choose visible GUI X-ray presets (`Cu Kα`, `30 keV`, `83 keV`) or enter a manual energy.
 - Keep going when one CIF fails; errors and warnings are written to `Summary`.
@@ -112,10 +115,29 @@ The peak tables include:
 - `theta_deg`
 - `two_theta_cu_ka_deg`
 - `warnings`
+- `young_modulus_hkl_normal_GPa`
+- `elastic_status`
+- `elastic_warning`
+- `elastic_hkl_used`
+- `elastic_family_count`
+- `elastic_family_moduli_GPa`
+- `elastic_modulus_note`
 
 ## Scientific Scope
 
 CIF2Peaks exports theoretical powder XRD peak references from CIF structures.
+When Cij values are supplied, `young_modulus_hkl_normal_GPa` is calculated
+from the user-provided stiffness matrix and the CIF lattice-derived hkl plane
+normal. It is not an experimental modulus and is not inferred from the CIF
+alone.
+For four-index Miller-Bravais plane labels, the elastic calculation only uses
+valid plane indices satisfying `i = -(h + k)` and reports the three-index
+`elastic_hkl_used`. If one simulated powder peak contains multiple hkl
+families, the primary modulus follows the representative hkl and
+`elastic_family_moduli_GPa` lists the family-level values.
+The default Cij coordinate-frame assumption is
+`crystal_cartesian_from_cif_lattice`; CIF2Peaks does not rotate literature Cij
+matrices between alternate crystallographic settings.
 
 It is not:
 

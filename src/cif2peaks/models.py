@@ -7,6 +7,8 @@ from uuid import uuid4
 
 import numpy as np
 
+from .elastic import ElasticConstants
+
 
 XrdAxisMode = Literal["two_theta", "d_spacing", "q", "g"]
 XrayInputMode = Literal["source", "wavelength", "energy"]
@@ -81,6 +83,7 @@ class XRDPeakRecord:
     multiplicity: int
     label: str
     family_label: str
+    family_hkls: tuple[tuple[int, ...], ...] = field(default_factory=tuple)
 
 
 @dataclass
@@ -122,6 +125,7 @@ class XrdPhase:
     enabled: bool = True
     crystal: CrystalModel | None = None
     result: XRDResult | None = None
+    elastic_constants: ElasticConstants | None = None
     error: str | None = None
 
     @property
@@ -168,6 +172,7 @@ class Cif2PeaksPeakRow:
     i: int | None
     l: int  # noqa: E741 - hkl uses the conventional Miller index name.
     family_label: str
+    family_hkls: tuple[tuple[int, ...], ...]
     d_A: float
     g_1_over_A: float
     q_1_over_A: float

@@ -104,6 +104,7 @@ def peak_to_cif2peaks_row(phase: XrdPhase, peak: XRDPeakRecord) -> Cif2PeaksPeak
         i=i,
         l=ell,
         family_label=peak.family_label,
+        family_hkls=peak.family_hkls or (peak.hkl,),
         d_A=peak.d_spacing_A,
         g_1_over_A=peak.g_invA,
         q_1_over_A=peak.q_invA,

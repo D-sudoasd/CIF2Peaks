@@ -8,6 +8,7 @@ import sys
 import textwrap
 import tomllib
 import xml.etree.ElementTree as ET
+from dataclasses import replace
 from pathlib import Path
 from zipfile import ZipFile
 
@@ -23,6 +24,7 @@ from cif2peaks.exporters import (
     export_cif2peaks_workbook,
     pattern_profile_rows,
 )
+from cif2peaks.elastic import ElasticConstants
 from cif2peaks.models import Cif2PeaksExportPayload, Cif2PeaksSettings
 from cif2peaks.service import Cif2PeaksService
 
@@ -202,6 +204,11 @@ def _workbook_sheet_names(workbook_path: Path) -> list[str]:
         xml = archive.read("xl/workbook.xml")
     root = ET.fromstring(xml)
     return [sheet.attrib["name"] for sheet in root.findall(".//main:sheet", namespace)]
+
+
+def _worksheet_rows_by_name(workbook_path: Path, sheet_name: str) -> list[list[str]]:
+    sheet_names = _workbook_sheet_names(workbook_path)
+    return _worksheet_rows(workbook_path, sheet_names.index(sheet_name) + 1)
 
 
 def _worksheet_cell_styles(workbook_path: Path, sheet_index: int) -> list[list[str]]:
@@ -444,6 +451,15 @@ def test_hexagonal_hkl_labels_preserve_four_index_notation(tmp_path: Path) -> No
     assert combined_sheet[1][headers.index("l")] == "0"
 
 
+def test_hkl_plane_indices_convert_valid_miller_bravais_only() -> None:
+    from cif2peaks.hkl import plane_hkl_for_normal
+
+    assert plane_hkl_for_normal((1, 2, 3)) == (1, 2, 3)
+    assert plane_hkl_for_normal((1, 0, -1, 0)) == (1, 0, 0)
+    with pytest.raises(ValueError, match="Miller-Bravais"):
+        plane_hkl_for_normal((1, 0, 0, 0))
+
+
 def test_cubic_hkl_labels_remain_three_index_notation() -> None:
     service = Cif2PeaksService()
     phase = service.load_phase(TI_BETA_CIF)
@@ -459,6 +475,202 @@ def test_cubic_hkl_labels_remain_three_index_notation() -> None:
     assert first["i"] is None
     assert first["l"] == 0
     assert not any("CIF reports" in warning for warning in phase.warning_messages)
+
+
+def test_cubic_elastic_constants_compute_hkl_normal_young_moduli() -> None:
+    service = Cif2PeaksService()
+    phase = service.load_phase(TI_BETA_CIF)
+    assert phase.crystal is not None
+    elastic = ElasticConstants.from_cubic(c11_GPa=250.0, c12_GPa=150.0, c44_GPa=100.0, source="test cubic")
+
+    e100 = elastic.young_modulus_hkl_normal_GPa(phase.crystal.pymatgen_structure.lattice, (1, 0, 0))
+    e110 = elastic.young_modulus_hkl_normal_GPa(phase.crystal.pymatgen_structure.lattice, (1, 1, 0))
+    e111 = elastic.young_modulus_hkl_normal_GPa(phase.crystal.pymatgen_structure.lattice, (1, 1, 1))
+
+    assert elastic.status == "valid"
+    assert elastic.warnings == []
+    assert e100 == pytest.approx(137.5, rel=1e-4)
+    assert e110 > e100
+    assert e111 > e110
+
+
+def test_combined_peak_rows_include_elastic_modulus_when_cij_is_available() -> None:
+    service = Cif2PeaksService()
+    phase = service.load_phase(TI_BETA_CIF)
+    phase.elastic_constants = ElasticConstants.from_cubic(c11_GPa=250.0, c12_GPa=150.0, c44_GPa=100.0)
+    service.simulate_phase(phase, Cif2PeaksSettings())
+
+    rows = combined_peak_rows([phase])
+
+    assert rows
+    first = rows[0]
+    assert first["hkl"] == "(1 1 0)"
+    assert first["young_modulus_hkl_normal_GPa"] == pytest.approx(209.5238095, rel=1e-4)
+    assert first["elastic_status"] == "valid"
+    assert first["elastic_warning"] == ""
+
+
+def test_four_index_hkil_rows_can_receive_hkl_normal_modulus() -> None:
+    service = Cif2PeaksService()
+    phase = service.load_phase(TI_NB_HCP_CIF)
+    phase.elastic_constants = ElasticConstants.from_cubic(c11_GPa=250.0, c12_GPa=150.0, c44_GPa=100.0)
+    service.simulate_phase(phase, Cif2PeaksSettings())
+
+    rows = combined_peak_rows([phase])
+    direct_modulus = phase.elastic_constants.young_modulus_hkl_normal_GPa(phase.crystal.pymatgen_structure.lattice, (1, 0, 0))
+
+    assert rows[0]["hkl"] == "(1 0 -1 0)"
+    assert rows[0]["elastic_hkl_used"] == "(1 0 0)"
+    assert rows[0]["young_modulus_hkl_normal_GPa"] == pytest.approx(direct_modulus)
+    assert rows[0]["elastic_status"] == "valid"
+
+
+def test_invalid_miller_bravais_hkil_leaves_modulus_blank_with_warning() -> None:
+    service = Cif2PeaksService()
+    phase = service.load_phase(TI_NB_HCP_CIF)
+    phase.elastic_constants = ElasticConstants.from_cubic(c11_GPa=250.0, c12_GPa=150.0, c44_GPa=100.0)
+    service.simulate_phase(phase, Cif2PeaksSettings())
+    assert phase.result is not None
+    phase.result.peaks[0] = replace(phase.result.peaks[0], hkl=(1, 0, 0, 0))
+
+    rows = combined_peak_rows([phase])
+
+    assert rows[0]["young_modulus_hkl_normal_GPa"] == ""
+    assert rows[0]["elastic_hkl_used"] == ""
+    assert "Miller-Bravais" in rows[0]["elastic_warning"]
+
+
+def test_multiple_hkl_families_export_primary_and_family_moduli() -> None:
+    service = Cif2PeaksService()
+    phase = service.load_phase(TI_BETA_CIF)
+    phase.elastic_constants = ElasticConstants.from_cubic(c11_GPa=250.0, c12_GPa=150.0, c44_GPa=100.0)
+    service.simulate_phase(phase, Cif2PeaksSettings())
+    assert phase.result is not None
+    phase.result.peaks[0] = replace(phase.result.peaks[0], hkl=(1, 1, 0), family_hkls=((1, 1, 0), (2, 0, 0)))
+
+    row = combined_peak_rows([phase])[0]
+
+    assert row["elastic_hkl_used"] == "(1 1 0)"
+    assert row["elastic_family_count"] == 2
+    assert "(1 1 0)=" in row["elastic_family_moduli_GPa"]
+    assert "(2 0 0)=" in row["elastic_family_moduli_GPa"]
+    assert "multiple_hkl_families" in row["elastic_modulus_note"]
+
+
+def test_invalid_elastic_constants_warn_without_blocking_peak_export() -> None:
+    service = Cif2PeaksService()
+    phase = service.load_phase(TI_BETA_CIF)
+    phase.elastic_constants = ElasticConstants.from_matrix(np.zeros((6, 6)), source="invalid singular")
+    service.simulate_phase(phase, Cif2PeaksSettings())
+
+    rows = combined_peak_rows([phase])
+
+    assert rows
+    assert rows[0]["young_modulus_hkl_normal_GPa"] == ""
+    assert rows[0]["elastic_status"] == "invalid_elastic_constants"
+    assert "singular" in rows[0]["elastic_warning"].lower() or "positive definite" in rows[0]["elastic_warning"].lower()
+
+
+def test_workbook_exports_elastic_columns_and_constants_sheet(tmp_path: Path) -> None:
+    service = Cif2PeaksService()
+    phases = [service.load_phase(TI_BETA_CIF), service.load_phase(TI_NB_HCP_CIF)]
+    phases[0].elastic_constants = ElasticConstants.from_cubic(
+        c11_GPa=250.0,
+        c12_GPa=150.0,
+        c44_GPa=100.0,
+        source="literature demo",
+    )
+    settings = Cif2PeaksSettings()
+    service.simulate_phases(phases, settings)
+    output = tmp_path / "elastic_export.xlsx"
+
+    export_cif2peaks_workbook(Cif2PeaksExportPayload(phases, settings), output)
+
+    sheet_names = _workbook_sheet_names(output)
+    assert "Elastic Constants" in sheet_names
+    combined_rows = _worksheet_rows(output, 2)
+    headers = combined_rows[0]
+    assert "young_modulus_hkl_normal_GPa" in headers
+    assert "elastic_status" in headers
+    assert "elastic_warning" in headers
+    assert "elastic_hkl_used" in headers
+    assert "elastic_family_count" in headers
+    assert "elastic_family_moduli_GPa" in headers
+    assert "elastic_modulus_note" in headers
+    modulus_index = headers.index("young_modulus_hkl_normal_GPa")
+    status_index = headers.index("elastic_status")
+    by_phase = {row[headers.index("phase_name")]: row for row in combined_rows[1:] if row}
+    assert float(by_phase["ti_beta_bcc_im3m"][modulus_index]) > 0.0
+    assert by_phase["ti_beta_bcc_im3m"][status_index] == "valid"
+    assert by_phase["ti_nb_hcp_p63mmc"][modulus_index] == ""
+    assert by_phase["ti_nb_hcp_p63mmc"][status_index] == "no_elastic_constants"
+
+    beginner_rows = _worksheet_rows(output, 3)
+    assert "晶面法向杨氏模量 (GPa)" in beginner_rows[0]
+    assert "弹性常数状态" in beginner_rows[0]
+
+    elastic_sheet_index = sheet_names.index("Elastic Constants") + 1
+    elastic_rows = _worksheet_rows(output, elastic_sheet_index)
+    elastic_headers = elastic_rows[0]
+    assert elastic_headers[:6] == ["phase_name", "cif_name", "elastic_status", "elastic_warning", "unit", "source"]
+    assert "coordinate_frame" in elastic_headers
+    assert elastic_rows[1][elastic_headers.index("elastic_status")] == "valid"
+    assert elastic_rows[1][elastic_headers.index("C11")] == "250"
+    assert elastic_rows[1][elastic_headers.index("source")] == "literature demo"
+    assert elastic_rows[1][elastic_headers.index("coordinate_frame")] == "crystal_cartesian_from_cif_lattice"
+    assert elastic_rows[2][elastic_headers.index("elastic_status")] == "no_elastic_constants"
+
+    summary_rows = _worksheet_rows(output, 1)
+    summary_header_index = next(index for index, row in enumerate(summary_rows) if row and row[0] == "phase_name")
+    summary_header = summary_rows[summary_header_index]
+    assert "elastic_status" in summary_header
+    assert summary_rows[summary_header_index + 1][summary_header.index("elastic_status")] == "valid"
+    assert summary_rows[summary_header_index + 2][summary_header.index("elastic_status")] == "no_elastic_constants"
+
+
+def test_simple_gui_export_accepts_elastic_constants_for_selected_cifs(tmp_path: Path) -> None:
+    from cif2peaks.gui import run_simple_gui_export
+
+    cif_path = tmp_path / TI_BETA_CIF.name
+    cif_path.write_bytes(TI_BETA_CIF.read_bytes())
+    output = tmp_path / "gui_elastic.xlsx"
+
+    result = run_simple_gui_export(
+        [cif_path],
+        output,
+        elastic_constants={
+            cif_path: ElasticConstants.from_cubic(c11_GPa=250.0, c12_GPa=150.0, c44_GPa=100.0, source="GUI input"),
+        },
+    )
+
+    assert result.output_path == output
+    combined_rows = _worksheet_rows(output, 2)
+    headers = combined_rows[0]
+    assert combined_rows[1][headers.index("elastic_status")] == "valid"
+    assert float(combined_rows[1][headers.index("young_modulus_hkl_normal_GPa")]) > 0.0
+    sheet_names = _workbook_sheet_names(output)
+    elastic_rows = _worksheet_rows(output, sheet_names.index("Elastic Constants") + 1)
+    assert elastic_rows[1][elastic_rows[0].index("source")] == "GUI input"
+
+
+def test_gui_full_cij_matrix_parser_accepts_six_by_six_paste() -> None:
+    from cif2peaks.gui import _parse_full_cij_matrix
+
+    pasted = """
+    250 150 150 0 0 0
+    150 250 150 0 0 0
+    150 150 250 0 0 0
+    0 0 0 100 0 0
+    0 0 0 0 100 0
+    0 0 0 0 0 100
+    """
+
+    elastic = _parse_full_cij_matrix(pasted, source="pasted matrix")
+
+    assert elastic.status == "valid"
+    assert elastic.source == "pasted matrix"
+    assert elastic.stiffness_matrix_GPa[0, 0] == 250
+    assert elastic.stiffness_matrix_GPa[5, 5] == 100
 
 
 def test_cif2peaks_loads_occupancy_conflict_cif_with_warning(tmp_path: Path) -> None:
@@ -786,7 +998,7 @@ def test_cif2peaks_workbook_peak_sheets_are_excel_friendly(tmp_path: Path) -> No
         combined = archive.read("xl/worksheets/sheet2.xml").decode("utf-8")
 
     assert '<pane ySplit="1" topLeftCell="A2"' in combined
-    assert '<autoFilter ref="A1:U' in combined
+    assert '<autoFilter ref="A1:AB' in combined
     assert '<cols>' in combined
     assert 'width="24"' in combined
 
@@ -800,12 +1012,13 @@ def test_cif2peaks_workbook_opens_with_chinese_user_guide(tmp_path: Path) -> Non
 
     export_cif2peaks_workbook(Cif2PeaksExportPayload([phase], settings), output)
 
+    sheet_names = _workbook_sheet_names(output)
     with ZipFile(output) as archive:
         workbook = archive.read("xl/workbook.xml").decode("utf-8")
-        guide_xml = archive.read("xl/worksheets/sheet5.xml").decode("utf-8")
+        guide_xml = archive.read(f"xl/worksheets/sheet{sheet_names.index('使用说明') + 1}.xml").decode("utf-8")
 
     assert 'name="使用说明"' in workbook
-    assert 'activeTab="4"' in workbook
+    assert f'activeTab="{len(sheet_names) - 1}"' in workbook
     assert "默认参数" in guide_xml
     assert "推荐峰表" in guide_xml
     assert "Combined Peaks" in guide_xml
@@ -826,8 +1039,6 @@ def test_cif2peaks_workbook_includes_beginner_chinese_peak_table(tmp_path: Path)
     rows = _worksheet_rows(output, 3)
 
     assert 'name="推荐峰表"' in workbook
-    with ZipFile(output) as archive:
-        guide_xml = archive.read("xl/worksheets/sheet6.xml").decode("utf-8")
     assert rows[0] == [
         "相名",
         "CIF 文件",
@@ -840,10 +1051,13 @@ def test_cif2peaks_workbook_includes_beginner_chinese_peak_table(tmp_path: Path)
         "相对强度",
         "多重性",
         "提示",
+        "晶面法向杨氏模量 (GPa)",
+        "弹性常数状态",
     ]
     assert len(rows) > 2
-    assert "推荐峰表" in guide_xml
-    assert "中文列名" in guide_xml
+    guide_text = "\n".join("|".join(row) for row in _worksheet_rows_by_name(output, "使用说明"))
+    assert "推荐峰表" in guide_text
+    assert "中文列名" in guide_text
 
 
 def test_cif2peaks_workbook_registers_stylesheet_for_export_polish(tmp_path: Path) -> None:
@@ -905,7 +1119,7 @@ def test_cif2peaks_user_guide_explains_beginner_columns_and_limits(tmp_path: Pat
 
     export_cif2peaks_workbook(Cif2PeaksExportPayload(phases, settings), output)
 
-    guide_text = "\n".join("|".join(row) for row in _worksheet_rows(output, 6))
+    guide_text = "\n".join("|".join(row) for row in _worksheet_rows_by_name(output, "使用说明"))
 
     assert "新手先看哪几列" in guide_text
     assert "two_theta_current_deg" in guide_text
@@ -913,6 +1127,11 @@ def test_cif2peaks_user_guide_explains_beginner_columns_and_limits(tmp_path: Pat
     assert "相对强度" in guide_text
     assert "不是实验定量强度" in guide_text
     assert "warnings" in guide_text
+    assert "晶面法向杨氏模量" in guide_text
+    assert "Cij" in guide_text
+    assert "Miller-Bravais" in guide_text
+    assert "multiple_hkl_families" in guide_text
+    assert "crystal_cartesian_from_cif_lattice" in guide_text
 
 
 def test_batch_module_help_and_package_main_cli(tmp_path: Path) -> None:
@@ -1156,6 +1375,7 @@ def test_beginner_gui_previews_cif_metadata_before_export(tmp_path: Path) -> Non
     assert result.phase_rows[0][2] != "-"
     assert result.phase_rows[0][3] == "待导出"
     assert result.phase_rows[0][4] == ""
+    assert result.phase_rows[0][5] == "no_elastic_constants"
     assert result.phase_rows[1][0] == bad_cif.name
     assert result.phase_rows[1][1] == "-"
     assert result.phase_rows[1][3] == "无法读取"
@@ -1163,11 +1383,24 @@ def test_beginner_gui_previews_cif_metadata_before_export(tmp_path: Path) -> Non
     assert "格式" in result.phase_rows[1][4]
     assert "Traceback" not in result.phase_rows[1][4]
     assert "[Errno" not in result.phase_rows[1][4]
+    assert result.phase_rows[1][5] == "no_elastic_constants"
 
     folder_result = preview_simple_gui_inputs([tmp_path])
     assert folder_result.ready_count == 1
     assert folder_result.failed_count == 1
     assert [row[0] for row in folder_result.phase_rows] == [bad_cif.name, good_cif.name]
+
+
+def test_preview_gui_keeps_language_as_third_positional_argument(tmp_path: Path) -> None:
+    from cif2peaks.gui import preview_simple_gui_inputs
+
+    cif_path = tmp_path / TI_BETA_CIF.name
+    cif_path.write_bytes(TI_BETA_CIF.read_bytes())
+
+    result = preview_simple_gui_inputs([cif_path], None, "en")
+
+    assert result.phase_rows[0][3] == "Ready"
+    assert result.phase_rows[0][5] == "no_elastic_constants"
 
 
 def test_gui_startup_collects_dragged_cif_files_and_folders(tmp_path: Path) -> None:

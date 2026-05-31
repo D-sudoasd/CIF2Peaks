@@ -21,3 +21,16 @@ def split_hkl_components(values: Iterable[object]) -> tuple[int, int, int | None
         return h, k, None, ell
     h, k, i, ell = hkl
     return h, k, i, ell
+
+
+def plane_hkl_for_normal(values: Iterable[object]) -> tuple[int, int, int]:
+    hkl = normalize_hkl(values)
+    if len(hkl) == 3:
+        h, k, ell = hkl
+        return h, k, ell
+    h, k, i, ell = hkl
+    if i != -(h + k):
+        raise ValueError(
+            f"Four-index Miller-Bravais plane hkil must satisfy i = -(h + k), got {hkl}."
+        )
+    return h, k, ell

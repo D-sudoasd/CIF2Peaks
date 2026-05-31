@@ -11,7 +11,7 @@ from zipfile import ZIP_DEFLATED, ZipFile
 
 import numpy as np
 
-from .hkl import format_hkl
+from .hkl import format_hkl, plane_hkl_for_normal
 from .models import ExperimentalPattern, Cif2PeaksExportPayload, Cif2PeaksPeakRow, XrdAxisMode, XrdPhase
 from .service import phase_peak_rows
 from .utils import friendly_cif_issue_message, now_iso, package_versions
@@ -39,6 +39,13 @@ PEAK_HEADERS = [
     "two_theta_cu_ka_deg",
     "space_group_from_cif",
     "space_group_detected",
+    "young_modulus_hkl_normal_GPa",
+    "elastic_status",
+    "elastic_warning",
+    "elastic_hkl_used",
+    "elastic_family_count",
+    "elastic_family_moduli_GPa",
+    "elastic_modulus_note",
 ]
 
 PEAK_REFERENCE_HEADERS = [
@@ -70,6 +77,52 @@ PATTERN_PROFILE_HEADERS = [
     "g_1_over_A",
 ]
 
+ELASTIC_CONSTANTS_HEADERS = [
+    "phase_name",
+    "cif_name",
+    "elastic_status",
+    "elastic_warning",
+    "unit",
+    "source",
+    "coordinate_frame",
+    "C11",
+    "C12",
+    "C13",
+    "C14",
+    "C15",
+    "C16",
+    "C21",
+    "C22",
+    "C23",
+    "C24",
+    "C25",
+    "C26",
+    "C31",
+    "C32",
+    "C33",
+    "C34",
+    "C35",
+    "C36",
+    "C41",
+    "C42",
+    "C43",
+    "C44",
+    "C45",
+    "C46",
+    "C51",
+    "C52",
+    "C53",
+    "C54",
+    "C55",
+    "C56",
+    "C61",
+    "C62",
+    "C63",
+    "C64",
+    "C65",
+    "C66",
+]
+
 BEGINNER_PEAK_HEADERS = [
     "相名",
     "CIF 文件",
@@ -82,6 +135,8 @@ BEGINNER_PEAK_HEADERS = [
     "相对强度",
     "多重性",
     "提示",
+    "晶面法向杨氏模量 (GPa)",
+    "弹性常数状态",
 ]
 
 HEADER_STYLE_ID = 1
@@ -136,6 +191,99 @@ def _space_group_detected(phase: XrdPhase) -> str:
     return phase.crystal.detected_space_group_symbol or ""
 
 
+def _row_hkl_tuple(row: Cif2PeaksPeakRow) -> tuple[int, ...]:
+    if row.i is None:
+        return row.h, row.k, row.l
+    return row.h, row.k, row.i, row.l
+
+
+def _blank_elastic_peak_values(status: str, warning: str = "") -> dict[str, Any]:
+    return {
+        "young_modulus_hkl_normal_GPa": "",
+        "elastic_status": status,
+        "elastic_warning": warning,
+        "elastic_hkl_used": "",
+        "elastic_family_count": "",
+        "elastic_family_moduli_GPa": "",
+        "elastic_modulus_note": "",
+    }
+
+
+def _format_hkl_for_normal(values: tuple[int, ...]) -> str:
+    return format_hkl(plane_hkl_for_normal(values))
+
+
+def _hkl_modulus_value(phase: XrdPhase, values: tuple[int, ...]) -> tuple[float | None, str, str]:
+    if phase.elastic_constants is None or phase.crystal is None:
+        return None, "", ""
+    try:
+        hkl_used = _format_hkl_for_normal(values)
+        modulus = phase.elastic_constants.young_modulus_hkl_normal_GPa(phase.crystal.pymatgen_structure.lattice, values)
+    except ValueError as exc:
+        return None, "", str(exc)
+    return modulus, hkl_used, "" if modulus is not None else "hkl normal Young's modulus could not be calculated."
+
+
+def _format_family_moduli(phase: XrdPhase, family_hkls: tuple[tuple[int, ...], ...]) -> tuple[str, list[str]]:
+    values: list[str] = []
+    warnings: list[str] = []
+    for hkl in family_hkls:
+        modulus, _hkl_used, warning = _hkl_modulus_value(phase, hkl)
+        if warning:
+            warnings.append(f"{format_hkl(hkl)}: {warning}")
+            values.append(f"{format_hkl(hkl)}=invalid")
+        elif modulus is not None:
+            values.append(f"{format_hkl(hkl)}={modulus:.6g}")
+    return "; ".join(values), warnings
+
+
+def _elastic_peak_values(phase: XrdPhase, row: Cif2PeaksPeakRow) -> dict[str, Any]:
+    elastic = phase.elastic_constants
+    family_hkls = row.family_hkls or (_row_hkl_tuple(row),)
+    if elastic is None:
+        values = _blank_elastic_peak_values("no_elastic_constants")
+        values["elastic_family_count"] = len(family_hkls)
+        return values
+    warnings_text = " | ".join(elastic.warnings)
+    if elastic.status == "invalid_elastic_constants":
+        values = _blank_elastic_peak_values(elastic.status, warnings_text)
+        values["elastic_family_count"] = len(family_hkls)
+        return values
+    if phase.crystal is None:
+        values = _blank_elastic_peak_values(
+            "invalid_elastic_constants",
+            "No crystal lattice is available for hkl normal calculation.",
+        )
+        values["elastic_family_count"] = len(family_hkls)
+        return values
+
+    modulus, hkl_used, warning = _hkl_modulus_value(phase, _row_hkl_tuple(row))
+    family_moduli, family_warnings = _format_family_moduli(phase, family_hkls)
+    warning_parts = [item for item in [warnings_text, warning, *family_warnings] if item]
+    note = ""
+    if len(family_hkls) > 1:
+        note = "multiple_hkl_families; primary value uses representative hkl"
+    if modulus is None:
+        values = _blank_elastic_peak_values(elastic.status, " | ".join(warning_parts))
+        values.update(
+            {
+                "elastic_family_count": len(family_hkls),
+                "elastic_family_moduli_GPa": family_moduli,
+                "elastic_modulus_note": note,
+            }
+        )
+        return values
+    return {
+        "young_modulus_hkl_normal_GPa": float(modulus),
+        "elastic_status": elastic.status,
+        "elastic_warning": " | ".join(warning_parts),
+        "elastic_hkl_used": hkl_used,
+        "elastic_family_count": len(family_hkls),
+        "elastic_family_moduli_GPa": family_moduli,
+        "elastic_modulus_note": note,
+    }
+
+
 def combined_peak_rows(phases: list[XrdPhase]) -> list[dict[str, Any]]:
     rows: list[dict[str, Any]] = []
     for phase in phases:
@@ -153,6 +301,7 @@ def combined_peak_rows(phases: list[XrdPhase]) -> list[dict[str, Any]]:
                     "space_group_detected": _space_group_detected(phase),
                 }
             )
+            values.update(_elastic_peak_values(phase, row))
             rows.append(values)
     return rows
 
@@ -283,12 +432,15 @@ def _summary_rows(payload: Cif2PeaksExportPayload) -> list[list[Any]]:
             "space_group_detected",
             "enabled",
             "peak_count",
+            "elastic_status",
+            "elastic_warning",
             "error",
             "warnings",
         ],
     ]
     for phase in payload.phases:
         crystal = phase.crystal
+        elastic_status, elastic_warning = _phase_elastic_summary(phase)
         rows.append(
             [
                 phase.phase_name,
@@ -301,6 +453,8 @@ def _summary_rows(payload: Cif2PeaksExportPayload) -> list[list[Any]]:
                 _space_group_detected(phase),
                 phase.enabled,
                 0 if phase.result is None else len(phase.result.peaks),
+                elastic_status,
+                elastic_warning,
                 friendly_cif_issue_message(phase.error, []),
                 " | ".join(phase.warning_messages),
             ]
@@ -319,6 +473,51 @@ def _experimental_rows(patterns: list[ExperimentalPattern]) -> list[list[Any]]:
     for pattern in patterns:
         for x_value, intensity in zip(pattern.x_values, pattern.intensity, strict=True):
             rows.append([pattern.label, str(pattern.path), pattern.axis_mode, float(x_value), float(intensity)])
+    return rows
+
+
+def _phase_elastic_summary(phase: XrdPhase) -> tuple[str, str]:
+    elastic = phase.elastic_constants
+    if elastic is None:
+        return "no_elastic_constants", ""
+    return elastic.status, " | ".join(elastic.warnings)
+
+
+def _phase_elastic_json(phase: XrdPhase) -> dict[str, Any]:
+    elastic = phase.elastic_constants
+    status, warning = _phase_elastic_summary(phase)
+    if elastic is None:
+        return {"status": status, "warning": warning}
+    return {
+        "status": status,
+        "warning": warning,
+        "unit": elastic.unit,
+        "source": elastic.source,
+        "coordinate_frame": elastic.coordinate_frame,
+        "stiffness_GPa": _to_jsonable(elastic.stiffness_GPa),
+    }
+
+
+def _elastic_constants_rows_for_sheet(phases: list[XrdPhase]) -> list[list[Any]]:
+    rows: list[list[Any]] = [ELASTIC_CONSTANTS_HEADERS]
+    for phase in phases:
+        elastic = phase.elastic_constants
+        status, warning = _phase_elastic_summary(phase)
+        values: list[Any] = [phase.phase_name, phase.cif_path.name, status, warning]
+        if elastic is None:
+            values.extend(["", "", ""])
+            values.extend([""] * 36)
+        else:
+            matrix = elastic.stiffness_matrix_GPa if elastic.stiffness_GPa else np.full((6, 6), np.nan)
+            if matrix.shape != (6, 6):
+                matrix = np.full((6, 6), np.nan)
+            values.extend([elastic.unit, elastic.source, elastic.coordinate_frame])
+            values.extend(
+                "" if not np.isfinite(float(matrix[row, column])) else float(matrix[row, column])
+                for row in range(6)
+                for column in range(6)
+            )
+        rows.append(values)
     return rows
 
 
@@ -349,10 +548,15 @@ def _user_guide_rows(payload: Cif2PeaksExportPayload) -> list[list[Any]]:
         ["相名 / phase_name", "判断这一行峰属于哪个 CIF/相；合并表中可按这一列筛选。"],
         ["晶面 hkl / hkl", "该峰对应的晶面指数，用于标注和对比不同相的特征峰。"],
         ["六方/三方 hkl 说明", "六方或三方结构可能采用四指数 Miller-Bravais 标记 (h k i l)，例如 (1 0 -1 0)；其他晶系通常为三指数 (h k l)。"],
+        ["Miller-Bravais 校验", "四指数晶面指标仅在 i = -(h+k) 时用于模量计算，并转换为 (h k l) 晶面法向；这里不支持四指数晶向指标。"],
         ["d 间距 / d_A", "晶面间距，单位 Å；跨不同 X 射线波长或不同仪器设置比较时优先看这一列。"],
         ["2θ 当前设置 / two_theta_current_deg", "按当前导出参数计算的 2θ 峰位，和实验谱横坐标对齐时优先看这一列。"],
         ["2θ Cu Kα / two_theta_cu_ka_deg", "固定换算到 Cu Kα 条件下的 2θ，便于和常见实验数据或文献表格快速比较。"],
         ["相对强度 / relative_intensity", "理论归一化强度，最强峰为 100；可辅助找强峰，但不是实验定量强度。"],
+        ["晶面法向杨氏模量 / young_modulus_hkl_normal_GPa", "仅当该相提供 Cij 时计算，表示 hkl 晶面法向方向的各向异性 Young's modulus，单位 GPa。"],
+        ["弹性 hkl 追溯列", "elastic_hkl_used 是实际用于法向计算的三指数晶面；multiple_hkl_families 表示该 2θ 峰含多个 hkl family，主模量只对应代表 hkl。"],
+        ["Cij 坐标系假设", "coordinate_frame 默认为 crystal_cartesian_from_cif_lattice；若文献 Cij 坐标轴与 CIF/Pymatgen 晶格笛卡尔坐标不一致，应先自行旋转转换。"],
+        ["弹性常数状态 / elastic_status", "no_elastic_constants 表示未提供 Cij；invalid_elastic_constants 表示 Cij 无法反求柔度或不满足校验，模量列会留空。"],
         ["提示 / warnings", "CIF 读取或计算提示；非空时先检查 CIF 信息、占位、对称性或计算限制。"],
         [],
         ["如何和实验谱对齐", "先确认实验 X 射线波长是否与导出设置一致；一致时主要对比 2θ 当前设置，不一致时先用 d 间距或重新导出对应波长。"],
@@ -369,6 +573,13 @@ def _user_guide_rows(payload: Cif2PeaksExportPayload) -> list[list[Any]]:
         ["two_theta_current_deg", "当前设置下的 2θ 位置，单位 °。"],
         ["two_theta_cu_ka_deg", "Cu Kα 条件下的 2θ 位置，单位 °。"],
         ["relative_intensity", "归一化相对强度，最强峰为 100。"],
+        ["young_modulus_hkl_normal_GPa", "由用户提供的 Cij 反求 compliance 后计算的 hkl 晶面法向杨氏模量，单位 GPa；不是 CIF 自动给出的实验模量。"],
+        ["elastic_hkl_used", "实际用于模量计算的三指数晶面法向。"],
+        ["elastic_family_count", "该 2θ 峰中 pymatgen 返回的 hkl family 数量。"],
+        ["elastic_family_moduli_GPa", "同一峰中每个 hkl family 的法向模量列表；多 family 峰需要优先看这一列。"],
+        ["elastic_modulus_note", "例如 multiple_hkl_families; primary value uses representative hkl，用于提示主模量列的适用范围。"],
+        ["elastic_status", "该相弹性常数状态：valid、valid_with_warnings、no_elastic_constants 或 invalid_elastic_constants。"],
+        ["elastic_warning", "Cij 单位、对称性、可逆性、正定性或 hkl 法向模量计算提示。"],
         ["warnings", "CIF 读取或计算过程中的提示；为空通常表示无明显问题。"],
     ]
 
@@ -401,6 +612,7 @@ def export_cif2peaks_json(payload: Cif2PeaksExportPayload, output_path: str | Pa
                     "space_group_detected": phase.crystal.detected_space_group_symbol,
                     "cell_parameters": phase.crystal.cell_parameters,
                 },
+                "elastic_constants": _phase_elastic_json(phase),
                 "metadata": {} if phase.result is None else _to_jsonable(phase.result.metadata),
                 "peaks": [_to_jsonable(row) for row in combined_peak_rows([phase])],
             }
@@ -503,6 +715,17 @@ def _table_column_widths(headers: list[Any]) -> list[int]:
         "g_1_over_A": 14,
         "q_1_over_A": 14,
         "theta_deg": 12,
+        "young_modulus_hkl_normal_GPa": 26,
+        "elastic_status": 22,
+        "elastic_warning": 42,
+        "elastic_hkl_used": 16,
+        "elastic_family_count": 18,
+        "elastic_family_moduli_GPa": 48,
+        "elastic_modulus_note": 44,
+        "Elastic Constants": 22,
+        "unit": 10,
+        "source": 28,
+        "coordinate_frame": 34,
         "相名": 22,
         "CIF 文件": 28,
         "化学式": 16,
@@ -514,6 +737,8 @@ def _table_column_widths(headers: list[Any]) -> list[int]:
         "相对强度": 14,
         "多重性": 12,
         "提示": 42,
+        "晶面法向杨氏模量 (GPa)": 24,
+        "弹性常数状态": 18,
     }
     return [default_widths.get(str(header), max(10, min(24, len(str(header)) + 2))) for header in headers]
 
@@ -526,6 +751,7 @@ def _is_table_sheet(rows: list[list[Any]]) -> bool:
         headers == PEAK_HEADERS
         or headers == BEGINNER_PEAK_HEADERS
         or headers == PATTERN_PROFILE_HEADERS
+        or headers == ELASTIC_CONSTANTS_HEADERS
         or headers == ["pattern_label", "source_file", "axis_mode", "x", "relative_intensity"]
     )
 
@@ -643,6 +869,8 @@ def _beginner_peak_rows_for_sheet(rows: list[dict[str, Any]]) -> list[list[Any]]
                 row.get("relative_intensity", ""),
                 row.get("multiplicity", ""),
                 row.get("warnings", ""),
+                row.get("young_modulus_hkl_normal_GPa", ""),
+                row.get("elastic_status", ""),
             ]
             for row in rows
         ],
@@ -669,6 +897,7 @@ def export_cif2peaks_workbook(payload: Cif2PeaksExportPayload, output_path: str 
     sheets.append((_safe_sheet_name("推荐峰表", used), _beginner_peak_rows_for_sheet(combined_rows), combined_row_style_ids))
     for phase in payload.phases:
         sheets.append((_safe_sheet_name(phase.phase_name, used), _peak_rows_for_sheet(combined_peak_rows([phase])), None))
+    sheets.append((_safe_sheet_name("Elastic Constants", used), _elastic_constants_rows_for_sheet(payload.phases), None))
     if payload.experimental_patterns:
         sheets.append((_safe_sheet_name("Experimental Data", used), _experimental_rows(payload.experimental_patterns), None))
     sheets.append((_safe_sheet_name("使用说明", used), _user_guide_rows(payload), None))

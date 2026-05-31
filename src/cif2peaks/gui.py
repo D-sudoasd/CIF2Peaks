@@ -4,12 +4,16 @@ from dataclasses import dataclass, field
 import math
 import os
 from pathlib import Path
+import re
 import sys
 from collections.abc import Callable
 from typing import Mapping, Sequence
 
+import numpy as np
+
 from .batch import export_output_paths
 from .constants import DEFAULT_XRD_SOURCE, X_RAY_ENERGY_WAVELENGTH_KEV_A
+from .elastic import ElasticConstants
 from .exporters import export_cif2peaks_pattern_workbook, export_cif2peaks_workbook
 from .models import Cif2PeaksExportPayload, Cif2PeaksSettings, XrdAxisMode
 from .plotting import (
@@ -28,7 +32,7 @@ from .utils import friendly_cif_issue_message
 class SimpleGuiExportResult:
     output_path: Path
     total_peaks: int
-    phase_rows: list[tuple[str, str, str, int, str]]
+    phase_rows: list[tuple[str, str, str, int, str, str]]
     peak_output_path: Path | None = None
     pattern_output_path: Path | None = None
     publication_figure_paths: list[Path] = field(default_factory=list)
@@ -38,7 +42,7 @@ class SimpleGuiExportResult:
 class SimpleGuiPreviewResult:
     ready_count: int
     failed_count: int
-    phase_rows: list[tuple[str, str, str, str, str]]
+    phase_rows: list[tuple[str, str, str, str, str, str]]
 
 
 @dataclass(frozen=True)
@@ -106,6 +110,11 @@ GUI_TEXT = {
         "display_name_label": "选中 CIF 显示名",
         "apply_display_name": "应用相名",
         "reset_display_name": "恢复文件名",
+        "elastic_cubic_label": "选中相 Cij (C11, C12, C44 / GPa)",
+        "elastic_matrix_label": "或粘贴完整 6x6 Cij 矩阵 (GPa)；坐标系默认 crystal_cartesian_from_cif_lattice",
+        "elastic_source_label": "Cij 来源",
+        "apply_elastic": "应用 Cij",
+        "clear_elastic": "清除 Cij",
         "add_files": "添加 CIF",
         "add_folder": "添加文件夹",
         "remove_selected": "移除选中",
@@ -126,6 +135,7 @@ GUI_TEXT = {
         "tree_space_group": "空间群",
         "tree_status": "状态 / 峰数",
         "tree_warning": "错误 / 警告",
+        "tree_elastic": "弹性常数",
         "export_excel": "导出结果",
         "open_excel": "打开 Excel",
         "no_cif": "尚未添加 CIF 文件",
@@ -209,6 +219,11 @@ GUI_TEXT = {
         "display_name_label": "Selected CIF display name",
         "apply_display_name": "Apply phase name",
         "reset_display_name": "Use file name",
+        "elastic_cubic_label": "Selected phase Cij (C11, C12, C44 / GPa)",
+        "elastic_matrix_label": "Or paste full 6x6 Cij matrix (GPa); frame defaults to crystal_cartesian_from_cif_lattice",
+        "elastic_source_label": "Cij source",
+        "apply_elastic": "Apply Cij",
+        "clear_elastic": "Clear Cij",
         "add_files": "Add CIFs",
         "add_folder": "Add folder",
         "remove_selected": "Remove selected",
@@ -229,6 +244,7 @@ GUI_TEXT = {
         "tree_space_group": "Space group",
         "tree_status": "Status / peaks",
         "tree_warning": "Error / warning",
+        "tree_elastic": "Elastic constants",
         "export_excel": "Export results",
         "open_excel": "Open Excel",
         "no_cif": "No CIF files added",
@@ -384,6 +400,84 @@ def _apply_display_names_to_phases(
     for phase in phases:
         phase_path = getattr(phase, "cif_path")
         setattr(phase, "phase_name", _display_name_for_path(phase_path, lookup))
+
+
+def _resolved_elastic_constants_lookup(
+    elastic_constants: Mapping[str | Path, ElasticConstants] | None,
+) -> dict[Path, ElasticConstants]:
+    if elastic_constants is None:
+        return {}
+    lookup: dict[Path, ElasticConstants] = {}
+    for key, value in elastic_constants.items():
+        try:
+            path = Path(key).expanduser().resolve()
+        except OSError:
+            continue
+        lookup[path] = value
+    return lookup
+
+
+def _apply_elastic_constants_to_phases(
+    phases: Sequence[object],
+    elastic_constants: Mapping[str | Path, ElasticConstants] | None,
+) -> None:
+    lookup = _resolved_elastic_constants_lookup(elastic_constants)
+    for phase in phases:
+        phase_path = Path(getattr(phase, "cif_path")).expanduser().resolve()
+        setattr(phase, "elastic_constants", lookup.get(phase_path))
+
+
+def _phase_elastic_status_text(phase: object) -> str:
+    elastic = getattr(phase, "elastic_constants", None)
+    return "no_elastic_constants" if elastic is None else elastic.status
+
+
+def _elastic_cubic_summary(elastic: ElasticConstants | None) -> str:
+    if elastic is None or not elastic.stiffness_GPa:
+        return ""
+    matrix = elastic.stiffness_matrix_GPa
+    if matrix.shape != (6, 6):
+        return ""
+    c11 = matrix[0, 0]
+    c12 = matrix[0, 1]
+    c44 = matrix[3, 3]
+    cubic_pattern = np.zeros((6, 6), dtype=float)
+    cubic_pattern[0, 0] = cubic_pattern[1, 1] = cubic_pattern[2, 2] = c11
+    cubic_pattern[0, 1] = cubic_pattern[0, 2] = cubic_pattern[1, 0] = c12
+    cubic_pattern[1, 2] = cubic_pattern[2, 0] = cubic_pattern[2, 1] = c12
+    cubic_pattern[3, 3] = cubic_pattern[4, 4] = cubic_pattern[5, 5] = c44
+    if not np.allclose(matrix, cubic_pattern, rtol=1e-6, atol=1e-8):
+        return ""
+    return f"{c11:g}, {c12:g}, {c44:g}"
+
+
+def _parse_cubic_cij(text: str, source: str = "") -> ElasticConstants:
+    values = [item for item in re.split(r"[\s,;]+", text.strip()) if item]
+    if len(values) != 3:
+        raise ValueError("Enter exactly three Cij values: C11, C12, C44 in GPa.")
+    c11, c12, c44 = (float(value) for value in values)
+    return ElasticConstants.from_cubic(c11_GPa=c11, c12_GPa=c12, c44_GPa=c44, source=source.strip())
+
+
+def _parse_full_cij_matrix(text: str, source: str = "") -> ElasticConstants:
+    rows = [[value for value in re.split(r"[\s,;]+", line.strip()) if value] for line in text.strip().splitlines() if line.strip()]
+    if len(rows) == 1 and len(rows[0]) == 36:
+        flat = [float(value) for value in rows[0]]
+        matrix = [flat[index : index + 6] for index in range(0, 36, 6)]
+    elif len(rows) == 6 and all(len(row) == 6 for row in rows):
+        matrix = [[float(value) for value in row] for row in rows]
+    else:
+        raise ValueError("Paste a full 6x6 Cij matrix: six rows with six GPa values per row.")
+    return ElasticConstants.from_matrix(matrix, source=source.strip())
+
+
+def _format_cij_matrix(elastic: ElasticConstants | None) -> str:
+    if elastic is None or not elastic.stiffness_GPa:
+        return ""
+    matrix = elastic.stiffness_matrix_GPa
+    if matrix.shape != (6, 6):
+        return ""
+    return "\n".join(" ".join(f"{float(value):g}" for value in row) for row in matrix)
 
 
 def _safe_filename_stem(value: str) -> str:
@@ -736,13 +830,16 @@ def preview_simple_gui_inputs(
     cif_paths: Sequence[str | Path],
     display_names: Mapping[str | Path, str] | None = None,
     language: str = "zh",
+    *,
+    elastic_constants: Mapping[str | Path, ElasticConstants] | None = None,
 ) -> SimpleGuiPreviewResult:
     resolved_cifs = initial_gui_cif_paths(cif_paths)
     service = Cif2PeaksService()
     phases = service.load_phases(resolved_cifs)
     _apply_display_names_to_phases(phases, display_names)
+    _apply_elastic_constants_to_phases(phases, elastic_constants)
 
-    phase_rows: list[tuple[str, str, str, str, str]] = []
+    phase_rows: list[tuple[str, str, str, str, str, str]] = []
     ready_count = 0
     failed_count = 0
     for phase in phases:
@@ -759,6 +856,7 @@ def preview_simple_gui_inputs(
                 phase.display_space_group,
                 status,
                 friendly_cif_issue_message(phase.error, phase.warning_messages),
+                _phase_elastic_status_text(phase),
             )
         )
 
@@ -780,6 +878,7 @@ def run_simple_gui_export(
     d_min_A: str | float | None = None,
     d_max_A: str | float | None = None,
     display_names: Mapping[str | Path, str] | None = None,
+    elastic_constants: Mapping[str | Path, ElasticConstants] | None = None,
     export_peaks: bool = True,
     export_patterns: bool = False,
     pattern_axis: XrdAxisMode = "two_theta",
@@ -802,6 +901,7 @@ def run_simple_gui_export(
     service = Cif2PeaksService()
     phases = service.load_phases(resolved_cifs)
     _apply_display_names_to_phases(phases, display_names)
+    _apply_elastic_constants_to_phases(phases, elastic_constants)
     service.simulate_phases(phases, settings)
 
     output = normalize_xlsx_output_path(output_path)
@@ -833,7 +933,7 @@ def run_simple_gui_export(
             export_xrd_pattern_tiff(phase.result, tiff_path, title=phase.phase_name, preset_name=publication_preset)
             publication_figure_paths.extend([svg_path, pdf_path, eps_path, png_path, tiff_path])
 
-    phase_rows: list[tuple[str, str, str, int, str]] = []
+    phase_rows: list[tuple[str, str, str, int, str, str]] = []
     for phase in phases:
         peak_count = 0 if phase.result is None else len(phase.result.peaks)
         phase_rows.append(
@@ -843,6 +943,7 @@ def run_simple_gui_export(
                 phase.display_space_group,
                 peak_count,
                 friendly_cif_issue_message(phase.error, phase.warning_messages),
+                _phase_elastic_status_text(phase),
             )
         )
     return SimpleGuiExportResult(
@@ -989,11 +1090,14 @@ def _launch_tk_app(initial_paths: Sequence[str | Path] = ()) -> None:
 
     selected_paths: list[Path] = initial_gui_cif_paths(initial_paths)
     display_names: dict[Path, str] = {path: path.name for path in selected_paths}
+    elastic_constants: dict[Path, ElasticConstants] = {}
     last_output_path: Path | None = None
     preview_generation = 0
     output_path_user_customized = False
     language_var = tk.StringVar(value="zh")
     display_name_var = tk.StringVar(value="")
+    elastic_cubic_var = tk.StringVar(value="")
+    elastic_source_var = tk.StringVar(value="")
     xray_preset_var = tk.StringVar(value=GUI_XRAY_PRESET_LABELS[0])
     energy_var = tk.StringVar(value="")
     min_var = tk.StringVar(value="")
@@ -1101,7 +1205,7 @@ def _launch_tk_app(initial_paths: Sequence[str | Path] = ()) -> None:
     files_panel = ttk.Frame(main, padding=14, style="Card.TFrame")
     files_panel.grid(row=0, column=0, rowspan=2, sticky="nsew", padx=(0, 14))
     files_panel.columnconfigure(0, weight=1)
-    files_panel.rowconfigure(5, weight=1)
+    files_panel.rowconfigure(6, weight=1)
 
     files_panel_title = ttk.Label(files_panel, style="Section.TLabel")
     files_panel_title.grid(row=0, column=0, columnspan=2, sticky="w", pady=(0, 2))
@@ -1125,6 +1229,36 @@ def _launch_tk_app(initial_paths: Sequence[str | Path] = ()) -> None:
     reset_name_button = ttk.Button(display_name_frame, style="Action.TButton")
     reset_name_button.grid(row=0, column=3)
 
+    elastic_frame = ttk.Frame(files_panel, style="CardBody.TFrame")
+    elastic_frame.grid(row=5, column=0, columnspan=2, sticky="ew", pady=(0, 10))
+    elastic_frame.columnconfigure(1, weight=1)
+    elastic_label = ttk.Label(elastic_frame, style="Card.TLabel")
+    elastic_label.grid(row=0, column=0, columnspan=4, sticky="w")
+    elastic_entry = ttk.Entry(elastic_frame, textvariable=elastic_cubic_var)
+    elastic_entry.grid(row=1, column=0, columnspan=2, sticky="ew", pady=(4, 0), padx=(0, 6))
+    elastic_matrix_label = ttk.Label(elastic_frame, style="Card.TLabel")
+    elastic_matrix_label.grid(row=2, column=0, columnspan=4, sticky="w", pady=(6, 0))
+    elastic_matrix_text = tk.Text(
+        elastic_frame,
+        height=4,
+        width=34,
+        bd=0,
+        highlightthickness=1,
+        highlightbackground=GUI_THEME["border"],
+        highlightcolor=GUI_THEME["primary"],
+        bg=GUI_THEME["panel_alt"],
+        fg=GUI_THEME["text"],
+    )
+    elastic_matrix_text.grid(row=3, column=0, columnspan=4, sticky="ew", pady=(4, 0))
+    elastic_source_label = ttk.Label(elastic_frame, style="Card.TLabel")
+    elastic_source_label.grid(row=4, column=0, sticky="w", pady=(6, 0), padx=(0, 6))
+    elastic_source_entry = ttk.Entry(elastic_frame, textvariable=elastic_source_var)
+    elastic_source_entry.grid(row=4, column=1, sticky="ew", pady=(6, 0), padx=(0, 6))
+    apply_elastic_button = ttk.Button(elastic_frame, style="Action.TButton")
+    apply_elastic_button.grid(row=4, column=2, pady=(6, 0), padx=(0, 6))
+    clear_elastic_button = ttk.Button(elastic_frame, style="Action.TButton")
+    clear_elastic_button.grid(row=4, column=3, pady=(6, 0))
+
     listbox = tk.Listbox(
         files_panel,
         height=16,
@@ -1139,9 +1273,9 @@ def _launch_tk_app(initial_paths: Sequence[str | Path] = ()) -> None:
         selectforeground="#ffffff",
         activestyle="none",
     )
-    listbox.grid(row=5, column=0, sticky="nsew")
+    listbox.grid(row=6, column=0, sticky="nsew")
     scrollbar = ttk.Scrollbar(files_panel, orient="vertical", command=listbox.yview)
-    scrollbar.grid(row=5, column=1, sticky="ns")
+    scrollbar.grid(row=6, column=1, sticky="ns")
     listbox.configure(yscrollcommand=scrollbar.set)
 
     def set_file_action_states() -> None:
@@ -1152,13 +1286,20 @@ def _launch_tk_app(initial_paths: Sequence[str | Path] = ()) -> None:
         apply_name_button.configure(state=selection_state)
         reset_name_button.configure(state=selection_state)
         display_name_entry.configure(state=selection_state)
+        elastic_entry.configure(state=selection_state)
+        elastic_matrix_text.configure(state=selection_state)
+        elastic_source_entry.configure(state=selection_state)
+        apply_elastic_button.configure(state=selection_state)
+        clear_elastic_button.configure(state=selection_state)
         clear_button.configure(state=tk.NORMAL if has_files else tk.DISABLED)
 
     def refresh_list() -> None:
         listbox.delete(0, tk.END)
         for path in selected_paths:
             display_name = display_names.get(path, path.name).strip() or path.name
+            elastic_suffix = " [Cij]" if path in elastic_constants else ""
             label = display_name if display_name == path.name else f"{display_name}  ({path.name})"
+            label = f"{label}{elastic_suffix}"
             listbox.insert(tk.END, label)
         count = len(selected_paths)
         input_summary_var.set(_gui_text(lang(), "no_cif") if count == 0 else _gui_text(lang(), "cif_count", count=count))
@@ -1202,7 +1343,10 @@ def _launch_tk_app(initial_paths: Sequence[str | Path] = ()) -> None:
             return
         selected_paths.clear()
         display_names.clear()
+        elastic_constants.clear()
         display_name_var.set("")
+        elastic_cubic_var.set("")
+        elastic_source_var.set("")
         tree.delete(*tree.get_children())
         refresh_list()
         append_activity(_gui_text(lang(), "log_cleared"))
@@ -1214,6 +1358,7 @@ def _launch_tk_app(initial_paths: Sequence[str | Path] = ()) -> None:
         for index, path in enumerate(selected_paths):
             if index in selected:
                 display_names.pop(path, None)
+                elastic_constants.pop(path, None)
         selected_paths[:] = [path for index, path in enumerate(selected_paths) if index not in selected]
         refresh_list()
 
@@ -1229,6 +1374,14 @@ def _launch_tk_app(initial_paths: Sequence[str | Path] = ()) -> None:
     def sync_display_name_entry() -> None:
         path = selected_display_path()
         display_name_var.set("" if path is None else display_names.get(path, path.name))
+        elastic = None if path is None else elastic_constants.get(path)
+        cubic_summary = _elastic_cubic_summary(elastic)
+        elastic_cubic_var.set(cubic_summary)
+        elastic_matrix_text.configure(state=tk.NORMAL)
+        elastic_matrix_text.delete("1.0", tk.END)
+        if elastic is not None and not cubic_summary:
+            elastic_matrix_text.insert("1.0", _format_cij_matrix(elastic))
+        elastic_source_var.set("" if elastic is None else elastic.source)
         set_file_action_states()
 
     def apply_display_name() -> None:
@@ -1245,9 +1398,36 @@ def _launch_tk_app(initial_paths: Sequence[str | Path] = ()) -> None:
         display_names[path] = path.name
         refresh_list()
 
+    def apply_elastic_constants() -> None:
+        path = selected_display_path()
+        if path is None:
+            return
+        try:
+            full_matrix_text = elastic_matrix_text.get("1.0", tk.END).strip()
+            elastic_constants[path] = (
+                _parse_full_cij_matrix(full_matrix_text, elastic_source_var.get())
+                if full_matrix_text
+                else _parse_cubic_cij(elastic_cubic_var.get(), elastic_source_var.get())
+            )
+        except Exception as exc:
+            messagebox.showerror(_gui_text(lang(), "export_failed_title"), str(exc))
+            return
+        refresh_list()
+
+    def clear_elastic_constants() -> None:
+        path = selected_display_path()
+        if path is None:
+            return
+        elastic_constants.pop(path, None)
+        elastic_cubic_var.set("")
+        elastic_matrix_text.delete("1.0", tk.END)
+        elastic_source_var.set("")
+        refresh_list()
+
     listbox.bind("<<ListboxSelect>>", lambda _event: sync_display_name_entry())
     listbox.bind("<Double-Button-1>", lambda _event: display_name_entry.focus_set())
     display_name_entry.bind("<Return>", lambda _event: apply_display_name())
+    elastic_entry.bind("<Return>", lambda _event: apply_elastic_constants())
 
     add_files_button = ttk.Button(file_buttons, command=add_files, style="Action.TButton")
     add_files_button.grid(row=0, column=0, padx=(0, 6))
@@ -1259,6 +1439,8 @@ def _launch_tk_app(initial_paths: Sequence[str | Path] = ()) -> None:
     clear_button.grid(row=0, column=3, sticky="w")
     apply_name_button.configure(command=apply_display_name)
     reset_name_button.configure(command=reset_display_name)
+    apply_elastic_button.configure(command=apply_elastic_constants)
+    clear_elastic_button.configure(command=clear_elastic_constants)
 
     settings_panel = ttk.Frame(main, padding=14, style="Card.TFrame")
     settings_panel.grid(row=0, column=1, sticky="nsew")
@@ -1378,7 +1560,7 @@ def _launch_tk_app(initial_paths: Sequence[str | Path] = ()) -> None:
     preview_panel_title = ttk.Label(preview_panel, style="Section.TLabel")
     preview_panel_title.grid(row=0, column=0, sticky="w", pady=(0, 10))
 
-    columns = ("display_name", "formula", "space_group", "peaks", "warning")
+    columns = ("display_name", "formula", "space_group", "peaks", "warning", "elastic")
     tree = ttk.Treeview(preview_panel, columns=columns, show="headings", height=10, style="Workbench.Treeview")
     for column, width in (
         ("display_name", 190),
@@ -1386,6 +1568,7 @@ def _launch_tk_app(initial_paths: Sequence[str | Path] = ()) -> None:
         ("space_group", 90),
         ("peaks", 90),
         ("warning", 240),
+        ("elastic", 140),
     ):
         tree.heading(column, text="")
         tree.column(column, width=width, anchor="w")
@@ -1436,12 +1619,18 @@ def _launch_tk_app(initial_paths: Sequence[str | Path] = ()) -> None:
 
         paths_snapshot = list(selected_paths)
         display_names_snapshot = {path: display_names.get(path, path.name) for path in paths_snapshot}
+        elastic_constants_snapshot = {path: elastic_constants[path] for path in paths_snapshot if path in elastic_constants}
         language_snapshot = lang()
         status_var.set(_gui_text(language_snapshot, "reading_cif"))
         append_activity(_gui_text(language_snapshot, "log_preview_reading"))
 
         def worker() -> None:
-            result = preview_simple_gui_inputs(paths_snapshot, display_names_snapshot, language_snapshot)
+            result = preview_simple_gui_inputs(
+                paths_snapshot,
+                display_names_snapshot,
+                language_snapshot,
+                elastic_constants=elastic_constants_snapshot,
+            )
 
             def finish() -> None:
                 if generation != preview_generation:
@@ -1505,6 +1694,7 @@ def _launch_tk_app(initial_paths: Sequence[str | Path] = ()) -> None:
         tree.delete(*tree.get_children())
         paths_snapshot = list(selected_paths)
         display_names_snapshot = {path: display_names.get(path, path.name) for path in paths_snapshot}
+        elastic_constants_snapshot = {path: elastic_constants[path] for path in paths_snapshot if path in elastic_constants}
 
         def worker() -> None:
             try:
@@ -1516,6 +1706,7 @@ def _launch_tk_app(initial_paths: Sequence[str | Path] = ()) -> None:
                     d_min_A=min_var.get(),
                     d_max_A=max_var.get(),
                     display_names=display_names_snapshot,
+                    elastic_constants=elastic_constants_snapshot,
                     export_peaks=export_peaks_var.get(),
                     export_patterns=export_patterns_var.get(),
                     pattern_axis=pattern_axis_var.get(),  # type: ignore[arg-type]
@@ -1581,6 +1772,11 @@ def _launch_tk_app(initial_paths: Sequence[str | Path] = ()) -> None:
         display_name_label.configure(text=_gui_text(lang(), "display_name_label"))
         apply_name_button.configure(text=_gui_text(lang(), "apply_display_name"))
         reset_name_button.configure(text=_gui_text(lang(), "reset_display_name"))
+        elastic_label.configure(text=_gui_text(lang(), "elastic_cubic_label"))
+        elastic_matrix_label.configure(text=_gui_text(lang(), "elastic_matrix_label"))
+        elastic_source_label.configure(text=_gui_text(lang(), "elastic_source_label"))
+        apply_elastic_button.configure(text=_gui_text(lang(), "apply_elastic"))
+        clear_elastic_button.configure(text=_gui_text(lang(), "clear_elastic"))
         add_files_button.configure(text=_gui_text(lang(), "add_files"))
         add_folder_button.configure(text=_gui_text(lang(), "add_folder"))
         remove_button.configure(text=_gui_text(lang(), "remove_selected"))
@@ -1606,6 +1802,7 @@ def _launch_tk_app(initial_paths: Sequence[str | Path] = ()) -> None:
         tree.heading("space_group", text=_gui_text(lang(), "tree_space_group"))
         tree.heading("peaks", text=_gui_text(lang(), "tree_status"))
         tree.heading("warning", text=_gui_text(lang(), "tree_warning"))
+        tree.heading("elastic", text=_gui_text(lang(), "tree_elastic"))
         export_button.configure(text=_gui_text(lang(), "export_excel"))
         open_button.configure(text=_gui_text(lang(), "open_excel"))
         input_summary_var.set(

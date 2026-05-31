@@ -119,6 +119,7 @@ class XRDService:
                 continue
             representative = max(families, key=lambda item: int(item.get("multiplicity", 1)))
             hkl = normalize_hkl(representative["hkl"])
+            family_hkls = tuple(normalize_hkl(item["hkl"]) for item in families)
             multiplicity = sum(int(item.get("multiplicity", 1)) for item in families)
             label = " / ".join(format_hkl(item["hkl"]) for item in families[:3])
             family_label = "{" + " / ".join(format_hkl(item["hkl"])[1:-1] for item in families[:6]) + "}"
@@ -138,6 +139,7 @@ class XRDService:
                     multiplicity=multiplicity,
                     label=label,
                     family_label=family_label,
+                    family_hkls=family_hkls,
                 )
             )
             profile += float(intensity) * _peak_profile(grid, float(two_theta), resolved_request.fwhm_deg, resolved_request.profile_model)
