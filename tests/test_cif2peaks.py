@@ -429,6 +429,80 @@ def test_cif2peaks_single_cif_peak_table_and_energy_shift() -> None:
     assert np.isclose(high_energy_phase.result.peaks[0].d_spacing_A, phase.result.peaks[0].d_spacing_A)
 
 
+def test_combined_peak_rows_export_material_scattering_factor_r_hkl() -> None:
+    service = Cif2PeaksService()
+    phase = service.load_phase(TI_BETA_CIF)
+    settings = Cif2PeaksSettings()
+    service.simulate_phase(phase, settings)
+
+    rows = combined_peak_rows([phase])
+    first = rows[0]
+    r_hkl_headers = {
+        "material_scattering_factor_R_hkl",
+        "theoretical_intensity_unscaled",
+        "cell_volume_A3",
+        "lp_factor",
+        "multiplicity_structure_factor_sq",
+        "r_hkl_model_note",
+    }
+
+    assert r_hkl_headers <= set(first)
+    assert np.isclose(max(row["relative_intensity"] for row in rows), 100.0)
+    assert first["theoretical_intensity_unscaled"] > 0
+    assert first["cell_volume_A3"] > 0
+    assert first["lp_factor"] > 0
+    assert np.isclose(
+        first["material_scattering_factor_R_hkl"],
+        first["theoretical_intensity_unscaled"] / first["cell_volume_A3"] ** 2,
+    )
+    assert np.isclose(
+        first["multiplicity_structure_factor_sq"],
+        first["theoretical_intensity_unscaled"] / first["lp_factor"],
+    )
+    assert "Debye-Waller" in first["r_hkl_model_note"]
+    assert "not a Rietveld residual" in first["r_hkl_model_note"]
+
+
+def test_r_hkl_columns_export_to_csv_json_excel_and_keep_pattern_scale(tmp_path: Path) -> None:
+    service = Cif2PeaksService()
+    phase = service.load_phase(TI_BETA_CIF)
+    settings = Cif2PeaksSettings(two_theta_min_deg=0.0, two_theta_max_deg=80.0, step_deg=0.2)
+    service.simulate_phase(phase, settings)
+    payload = Cif2PeaksExportPayload([phase], settings)
+
+    csv_output = tmp_path / "r_hkl.csv"
+    export_peak_reference_csv(payload, csv_output)
+    with csv_output.open("r", encoding="utf-8-sig", newline="") as handle:
+        csv_row = next(csv.DictReader(handle))
+
+    json_output = tmp_path / "r_hkl.json"
+    export_cif2peaks_json(payload, json_output)
+    json_row = json.loads(json_output.read_text(encoding="utf-8"))["phases"][0]["peaks"][0]
+
+    workbook_output = tmp_path / "r_hkl.xlsx"
+    export_cif2peaks_workbook(payload, workbook_output)
+    combined_headers = _worksheet_rows_by_name(workbook_output, "Combined Peaks")[0]
+    beginner_headers = _worksheet_rows_by_name(workbook_output, "推荐峰表")[0]
+    summary_rows = _worksheet_rows_by_name(workbook_output, "Summary")
+    guide_text = "\n".join("|".join(row) for row in _worksheet_rows_by_name(workbook_output, "使用说明"))
+    pattern_rows = pattern_profile_rows(payload, axis_mode="two_theta")
+
+    assert "material_scattering_factor_R_hkl" in csv_row
+    assert float(csv_row["material_scattering_factor_R_hkl"]) > 0
+    assert "material_scattering_factor_R_hkl" in json_row
+    assert json_row["material_scattering_factor_R_hkl"] > 0
+    assert "material_scattering_factor_R_hkl" in combined_headers
+    assert "theoretical_intensity_unscaled" in combined_headers
+    assert "R因子 R_hkl" in beginner_headers
+    assert "未归一化理论强度" in beginner_headers
+    assert "晶胞体积 (Å^3)" in beginner_headers
+    assert "R因子说明" in beginner_headers
+    assert ["R_hkl_definition", "R_hkl = I_unscaled / V_cell^2"] in summary_rows
+    assert "I_unscaled ≈ p_hkl |F_hkl|^2 LP" in guide_text
+    assert "不是 Rietveld" in guide_text
+    assert np.isclose(max(row["relative_intensity"] for row in pattern_rows), 100.0)
+
+
 def test_hexagonal_hkl_labels_preserve_four_index_notation(tmp_path: Path) -> None:
     service = Cif2PeaksService()
     phase = service.load_phase(TI_NB_HCP_CIF)
@@ -1126,17 +1200,21 @@ def test_cif2peaks_workbook_peak_sheets_are_excel_friendly(tmp_path: Path) -> No
         combined = archive.read("xl/worksheets/sheet2.xml").decode("utf-8")
 
     assert '<pane ySplit="1" topLeftCell="A2"' in combined
-    assert '<autoFilter ref="A1:AB' in combined
+    assert '<autoFilter ref="A1:AH' in combined
     assert '<cols>' in combined
+    combined_headers = _worksheet_rows(output, 2)[0]
+    beginner_headers = _worksheet_rows(output, 3)[0]
     combined_widths = _worksheet_column_widths(output, 2)
     beginner_widths = _worksheet_column_widths(output, 3)
-    assert combined_widths[1] == "22"
-    assert combined_widths[2] == "30"
-    assert combined_widths[9] == "12"
-    assert combined_widths[10] == "48"
-    assert combined_widths[28] == "44"
-    assert beginner_widths[1] == "18"
-    assert beginner_widths[11] == "48"
+    combined_width_by_header = {header: combined_widths[index] for index, header in enumerate(combined_headers, start=1)}
+    beginner_width_by_header = {header: beginner_widths[index] for index, header in enumerate(beginner_headers, start=1)}
+    assert combined_width_by_header["phase_name"] == "22"
+    assert combined_width_by_header["cif_name"] == "30"
+    assert combined_width_by_header["multiplicity"] == "12"
+    assert combined_width_by_header["warnings"] == "48"
+    assert combined_width_by_header["elastic_modulus_note"] == "44"
+    assert beginner_width_by_header["相名"] == "18"
+    assert beginner_width_by_header["提示"] == "48"
 
 
 def test_cif2peaks_workbook_opens_with_chinese_user_guide(tmp_path: Path) -> None:
@@ -1187,6 +1265,10 @@ def test_cif2peaks_workbook_includes_beginner_chinese_peak_table(tmp_path: Path)
         "相对强度",
         "多重性",
         "提示",
+        "R因子 R_hkl",
+        "未归一化理论强度",
+        "晶胞体积 (Å^3)",
+        "R因子说明",
         "晶面法向杨氏模量 (GPa)",
         "弹性常数状态",
     ]

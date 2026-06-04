@@ -11,6 +11,13 @@ from .models import CrystalModel, XRDPeakRecord, XRDRequest, XRDResult
 from .utils import now_iso, package_versions
 
 
+R_HKL_MODEL_NOTE = (
+    "R_hkl = I_unscaled / V_cell^2; I_unscaled from pymatgen unscaled powder intensity "
+    "p_hkl|F_hkl|^2*LP; Debye-Waller assumed 1; no experimental absorption, detector geometry, "
+    "or synchrotron polarization correction; not a Rietveld residual."
+)
+
+
 def _gaussian_profile(grid: np.ndarray, center: float, fwhm: float) -> np.ndarray:
     sigma = max(fwhm, 1e-6) / (2.0 * np.sqrt(2.0 * np.log(2.0)))
     return np.exp(-0.5 * ((grid - center) / sigma) ** 2)
@@ -27,6 +34,13 @@ def _peak_profile(grid: np.ndarray, center: float, fwhm: float, model: str) -> n
     if model == "lorentzian":
         return _lorentzian_profile(grid, center, fwhm)
     return 0.5 * _gaussian_profile(grid, center, fwhm) + 0.5 * _lorentzian_profile(grid, center, fwhm)
+
+
+def _lorentz_polarization_factor(theta_rad: float) -> float:
+    denominator = np.sin(theta_rad) ** 2 * np.cos(theta_rad)
+    if abs(float(denominator)) < 1e-12:
+        return float("inf")
+    return float((1.0 + np.cos(2.0 * theta_rad) ** 2) / denominator)
 
 
 def build_quality_report(result: XRDResult) -> dict[str, object]:
@@ -97,7 +111,7 @@ class XRDService:
         calculator = XRDCalculator(wavelength=wavelength, symprec=0.0)
         pattern = calculator.get_pattern(
             crystal.pymatgen_structure,
-            scaled=True,
+            scaled=False,
             two_theta_range=(resolved_request.two_theta_min_deg, resolved_request.two_theta_max_deg),
         )
 
@@ -113,6 +127,7 @@ class XRDService:
         pattern_y = np.asarray(pattern.y, dtype=float)
         d_hkls = np.asarray(pattern.d_hkls, dtype=float)
         max_intensity = float(np.max(pattern_y)) if pattern_y.size else 1.0
+        cell_volume_A3 = float(crystal.pymatgen_structure.lattice.volume)
 
         for two_theta, intensity, families, d_spacing in zip(pattern_x, pattern_y, pattern.hkls, d_hkls, strict=True):
             if not families:
@@ -126,6 +141,18 @@ class XRDService:
             theta = float(two_theta) / 2.0
             g_invA = 0.0 if float(d_spacing) == 0 else 1.0 / float(d_spacing)
             q_invA = 4.0 * np.pi * np.sin(np.deg2rad(theta)) / wavelength
+            lp_factor = _lorentz_polarization_factor(np.deg2rad(theta))
+            theoretical_intensity_unscaled = float(intensity)
+            multiplicity_structure_factor_sq = (
+                float("nan")
+                if not np.isfinite(lp_factor) or lp_factor == 0
+                else theoretical_intensity_unscaled / lp_factor
+            )
+            material_scattering_factor_R_hkl = (
+                float("nan")
+                if cell_volume_A3 <= 0
+                else theoretical_intensity_unscaled / (cell_volume_A3**2)
+            )
             peaks.append(
                 XRDPeakRecord(
                     hkl=hkl,
@@ -134,8 +161,14 @@ class XRDService:
                     two_theta_deg=float(two_theta),
                     q_invA=float(q_invA),
                     g_invA=float(g_invA),
-                    intensity=float(intensity),
-                    normalized_intensity=0.0 if max_intensity == 0 else float(intensity / max_intensity),
+                    intensity=theoretical_intensity_unscaled,
+                    normalized_intensity=0.0 if max_intensity == 0 else float(intensity / max_intensity * 100.0),
+                    theoretical_intensity_unscaled=theoretical_intensity_unscaled,
+                    cell_volume_A3=cell_volume_A3,
+                    lp_factor=lp_factor,
+                    multiplicity_structure_factor_sq=float(multiplicity_structure_factor_sq),
+                    material_scattering_factor_R_hkl=float(material_scattering_factor_R_hkl),
+                    r_hkl_model_note=R_HKL_MODEL_NOTE,
                     multiplicity=multiplicity,
                     label=label,
                     family_label=family_label,
@@ -173,6 +206,9 @@ class XRDService:
                 "wavelength_source": wavelength_source,
                 "source_preset": resolved_request.source_preset,
                 "wavelength_A": wavelength,
+                "cell_volume_A3": cell_volume_A3,
+                "R_hkl_definition": "R_hkl = I_unscaled / V_cell^2",
+                "I_unscaled_definition": "I_unscaled = p_hkl|F_hkl|^2*LP from pymatgen scaled=False; Debye-Waller assumed 1.",
                 "q_definition": "4*pi*sin(theta)/lambda",
                 "two_theta_range_deg": [resolved_request.two_theta_min_deg, resolved_request.two_theta_max_deg],
                 "step_deg": resolved_request.step_deg,
