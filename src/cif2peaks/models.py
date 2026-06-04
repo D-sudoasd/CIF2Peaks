@@ -80,6 +80,12 @@ class XRDPeakRecord:
     g_invA: float
     intensity: float
     normalized_intensity: float
+    theoretical_intensity_unscaled: float
+    cell_volume_A3: float
+    lp_factor: float
+    multiplicity_structure_factor_sq: float
+    material_scattering_factor_R_hkl: float
+    r_hkl_model_note: str
     multiplicity: int
     label: str
     family_label: str
@@ -180,6 +186,12 @@ class Cif2PeaksPeakRow:
     two_theta_current_deg: float
     two_theta_cu_ka_deg: float | None
     relative_intensity: float
+    theoretical_intensity_unscaled: float
+    cell_volume_A3: float
+    lp_factor: float
+    multiplicity_structure_factor_sq: float
+    material_scattering_factor_R_hkl: float
+    r_hkl_model_note: str
     multiplicity: int
 
 

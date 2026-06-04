@@ -107,6 +107,12 @@ The peak tables include:
 - `d_A`
 - `two_theta_current_deg`
 - `relative_intensity`
+- `material_scattering_factor_R_hkl`
+- `theoretical_intensity_unscaled`
+- `cell_volume_A3`
+- `lp_factor`
+- `multiplicity_structure_factor_sq`
+- `r_hkl_model_note`
 - `multiplicity`
 - `family_label`
 - `h`, `k`, `l`
@@ -126,6 +132,28 @@ The peak tables include:
 ## Scientific Scope
 
 CIF2Peaks exports theoretical powder XRD peak references from CIF structures.
+For direct comparison phase-fraction workflows, CIF2Peaks also exports a
+per-peak material scattering factor:
+
+```text
+R_hkl = I_unscaled / V_cell^2
+I_unscaled ≈ p_hkl |F_hkl|^2 LP
+```
+
+Here `I_unscaled` comes from `pymatgen`'s unscaled theoretical powder
+intensity, `V_cell` is the CIF/Pymatgen unit-cell volume, `p_hkl` is the
+multiplicity term, and `LP` is the Lorentz-polarization factor. If no reliable
+temperature-factor data are supplied, CIF2Peaks assumes `e^-2M = 1`.
+Experimental absorption, detector geometry, and synchrotron polarization
+corrections are not included.
+
+In Excel, an experimental integrated peak intensity `I_exp,j` can be corrected
+as `I_exp,j / material_scattering_factor_R_hkl,j`. Average those corrected
+values over the chosen peaks for each phase, then use the phase averages to
+estimate volume fractions, for example `f_B2 = S_B2 / (S_B2 + S_gamma)`.
+This `R_hkl` is not a Rietveld refinement residual such as `Rp`, `Rwp`, or
+`Rexp`.
+
 When Cij values are supplied, `young_modulus_hkl_normal_GPa` is calculated
 from the user-provided stiffness matrix and the CIF lattice-derived hkl plane
 normal. It is not an experimental modulus and is not inferred from the CIF

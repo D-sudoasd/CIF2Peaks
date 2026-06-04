@@ -112,6 +112,12 @@ def peak_to_cif2peaks_row(phase: XrdPhase, peak: XRDPeakRecord) -> Cif2PeaksPeak
         two_theta_current_deg=peak.two_theta_deg,
         two_theta_cu_ka_deg=two_theta_for_wavelength(peak.d_spacing_A, CU_KA_WAVELENGTH_A),
         relative_intensity=peak.normalized_intensity,
+        theoretical_intensity_unscaled=peak.theoretical_intensity_unscaled,
+        cell_volume_A3=peak.cell_volume_A3,
+        lp_factor=peak.lp_factor,
+        multiplicity_structure_factor_sq=peak.multiplicity_structure_factor_sq,
+        material_scattering_factor_R_hkl=peak.material_scattering_factor_R_hkl,
+        r_hkl_model_note=peak.r_hkl_model_note,
         multiplicity=peak.multiplicity,
     )
 
