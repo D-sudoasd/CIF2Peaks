@@ -222,6 +222,20 @@ def _worksheet_cell_styles(workbook_path: Path, sheet_index: int) -> list[list[s
     return styles
 
 
+def _worksheet_column_widths(workbook_path: Path, sheet_index: int) -> dict[int, str]:
+    namespace = {"main": "http://schemas.openxmlformats.org/spreadsheetml/2006/main"}
+    with ZipFile(workbook_path) as archive:
+        xml = archive.read(f"xl/worksheets/sheet{sheet_index}.xml")
+    root = ET.fromstring(xml)
+    widths: dict[int, str] = {}
+    for column in root.findall(".//main:col", namespace):
+        min_index = int(column.attrib["min"])
+        max_index = int(column.attrib["max"])
+        for index in range(min_index, max_index + 1):
+            widths[index] = column.attrib["width"]
+    return widths
+
+
 def test_project_is_cli_only_without_gui_dependencies() -> None:
     project = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))
     dependencies = "\n".join(project["project"]["dependencies"])
@@ -673,6 +687,114 @@ def test_gui_full_cij_matrix_parser_accepts_six_by_six_paste() -> None:
     assert elastic.stiffness_matrix_GPa[5, 5] == 100
 
 
+def test_gui_cij_table_values_parse_to_elastic_constants() -> None:
+    from cif2peaks.gui import _parse_cij_table_values
+
+    values = [
+        ["250", "150", "150", "0", "0", "0"],
+        ["150", "250", "150", "0", "0", "0"],
+        ["150", "150", "250", "0", "0", "0"],
+        ["0", "0", "0", "100", "0", "0"],
+        ["0", "0", "0", "0", "100", "0"],
+        ["0", "0", "0", "0", "0", "100"],
+    ]
+
+    elastic = _parse_cij_table_values(values, source="table input")
+
+    assert elastic.status == "valid"
+    assert elastic.source == "table input"
+    assert elastic.stiffness_matrix_GPa[0, 0] == 250
+    assert elastic.stiffness_matrix_GPa[5, 5] == 100
+
+
+@pytest.mark.parametrize(
+    "pasted",
+    [
+        "250\t150\t150\t0\t0\t0\n150\t250\t150\t0\t0\t0\n150\t150\t250\t0\t0\t0\n0\t0\t0\t100\t0\t0\n0\t0\t0\t0\t100\t0\n0\t0\t0\t0\t0\t100",
+        "250 150 150 0 0 0\n150 250 150 0 0 0\n150 150 250 0 0 0\n0 0 0 100 0 0\n0 0 0 0 100 0\n0 0 0 0 0 100",
+        "250,150,150,0,0,0,150,250,150,0,0,0,150,150,250,0,0,0,0,0,0,100,0,0,0,0,0,0,100,0,0,0,0,0,0,100",
+    ],
+)
+def test_gui_cij_paste_parser_accepts_common_matrix_formats(pasted: str) -> None:
+    from cif2peaks.gui import _parse_cij_paste_matrix
+
+    values = _parse_cij_paste_matrix(pasted)
+
+    assert values[0] == ["250", "150", "150", "0", "0", "0"]
+    assert values[5] == ["0", "0", "0", "0", "0", "100"]
+
+
+def test_gui_cij_table_rejects_incomplete_and_non_numeric_values() -> None:
+    from cif2peaks.gui import _parse_cij_paste_matrix, _parse_cij_table_values
+
+    with pytest.raises(ValueError, match="6x6"):
+        _parse_cij_paste_matrix("250 150 150")
+
+    values = [["0" for _column in range(6)] for _row in range(6)]
+    values[1][2] = "bad"
+    with pytest.raises(ValueError, match="C23 must be a number"):
+        _parse_cij_table_values(values)
+
+
+def test_gui_cij_table_rejects_non_finite_values() -> None:
+    from cif2peaks.gui import _parse_cij_table_values
+
+    values = [["1" for _column in range(6)] for _row in range(6)]
+    values[0][0] = "inf"
+    with pytest.raises(ValueError, match="C11 must be a finite number"):
+        _parse_cij_table_values(values)
+
+    values[0][0] = "1"
+    values[5][5] = "nan"
+    with pytest.raises(ValueError, match="C66 must be a finite number"):
+        _parse_cij_table_values(values)
+
+
+def test_gui_cubic_cij_rejects_non_finite_values() -> None:
+    from cif2peaks.gui import _parse_cubic_cij
+
+    with pytest.raises(ValueError, match="C11 must be a finite number"):
+        _parse_cubic_cij("nan 150 100")
+
+    with pytest.raises(ValueError, match="C44 must be a finite number"):
+        _parse_cubic_cij("250 150 -inf")
+
+
+def test_gui_cubic_cij_fill_builds_full_table_values() -> None:
+    from cif2peaks.gui import _cubic_cij_table_values
+
+    values = _cubic_cij_table_values("250, 150, 100")
+
+    assert values == [
+        ["250", "150", "150", "0", "0", "0"],
+        ["150", "250", "150", "0", "0", "0"],
+        ["150", "150", "250", "0", "0", "0"],
+        ["0", "0", "0", "100", "0", "0"],
+        ["0", "0", "0", "0", "100", "0"],
+        ["0", "0", "0", "0", "0", "100"],
+    ]
+
+
+def test_gui_format_cij_table_values_round_trips_full_matrix() -> None:
+    from cif2peaks.gui import _format_cij_table_values
+
+    elastic = ElasticConstants.from_matrix(
+        [
+            [250, 120, 110, 1, 2, 3],
+            [120, 245, 115, 4, 5, 6],
+            [110, 115, 240, 7, 8, 9],
+            [1, 4, 7, 90, 10, 11],
+            [2, 5, 8, 10, 95, 12],
+            [3, 6, 9, 11, 12, 100],
+        ]
+    )
+
+    values = _format_cij_table_values(elastic)
+
+    assert values[0] == ["250", "120", "110", "1", "2", "3"]
+    assert values[5] == ["3", "6", "9", "11", "12", "100"]
+
+
 def test_cif2peaks_loads_occupancy_conflict_cif_with_warning(tmp_path: Path) -> None:
     cif_path = _write_ni_occupancy_cif(tmp_path / "Ni.cif")
     service = Cif2PeaksService()
@@ -874,6 +996,12 @@ def test_pattern_workbook_exports_each_cif_and_combined_profile_rows(tmp_path: P
     assert {row[1] for row in data_rows} == {TI_BETA_CIF.name, TI_NB_HCP_CIF.name}
     assert all(row[2] == "two_theta" for row in data_rows)
     assert [float(row[3]) for row in data_rows[:3]] == [0.0, 1.0, 2.0]
+    pattern_widths = _worksheet_column_widths(output, 2)
+    assert pattern_widths[1] == "22"
+    assert pattern_widths[2] == "30"
+    assert pattern_widths[3] == "15"
+    assert pattern_widths[5] == "17"
+    assert pattern_widths[9] == "14"
 
 
 def test_pattern_profile_rows_convert_selected_axis_and_skip_nonfinite_values() -> None:
@@ -1000,7 +1128,15 @@ def test_cif2peaks_workbook_peak_sheets_are_excel_friendly(tmp_path: Path) -> No
     assert '<pane ySplit="1" topLeftCell="A2"' in combined
     assert '<autoFilter ref="A1:AB' in combined
     assert '<cols>' in combined
-    assert 'width="24"' in combined
+    combined_widths = _worksheet_column_widths(output, 2)
+    beginner_widths = _worksheet_column_widths(output, 3)
+    assert combined_widths[1] == "22"
+    assert combined_widths[2] == "30"
+    assert combined_widths[9] == "12"
+    assert combined_widths[10] == "48"
+    assert combined_widths[28] == "44"
+    assert beginner_widths[1] == "18"
+    assert beginner_widths[11] == "48"
 
 
 def test_cif2peaks_workbook_opens_with_chinese_user_guide(tmp_path: Path) -> None:
@@ -1073,6 +1209,10 @@ def test_cif2peaks_workbook_registers_stylesheet_for_export_polish(tmp_path: Pat
         content_types = archive.read("[Content_Types].xml").decode("utf-8")
         workbook_rels = archive.read("xl/_rels/workbook.xml.rels").decode("utf-8")
         styles_xml = archive.read("xl/styles.xml").decode("utf-8")
+    namespace = {"main": "http://schemas.openxmlformats.org/spreadsheetml/2006/main"}
+    styles_root = ET.fromstring(styles_xml)
+    fonts = styles_root.findall("main:fonts/main:font", namespace)
+    style_xfs = styles_root.findall("main:cellXfs/main:xf", namespace)
 
     assert 'PartName="/xl/styles.xml"' in content_types
     assert "spreadsheetml.styles+xml" in content_types
@@ -1080,6 +1220,15 @@ def test_cif2peaks_workbook_registers_stylesheet_for_export_polish(tmp_path: Pat
     assert 'Target="styles.xml"' in workbook_rels
     assert "<cellXfs" in styles_xml
     assert "FFF2CC" in styles_xml
+    assert [font.find("main:name", namespace).attrib["val"] for font in fonts] == ["Times New Roman", "Times New Roman"]
+    assert "Calibri" not in styles_xml
+    assert len(style_xfs) >= 3
+    assert all(
+        xf.find("main:alignment", namespace) is not None
+        and xf.find("main:alignment", namespace).attrib["horizontal"] == "center"
+        and xf.find("main:alignment", namespace).attrib["vertical"] == "center"
+        for xf in style_xfs
+    )
 
 
 def test_cif2peaks_combined_peak_sheets_color_rows_by_phase(tmp_path: Path) -> None:
@@ -1550,11 +1699,22 @@ def test_gui_exposes_minimal_workbench_theme_contract() -> None:
     assert GUI_WORKBENCH_LAYOUT["minsize"] == (1040, 680)
     assert GUI_WORKBENCH_LAYOUT["sidebar_width"] == 330
     assert GUI_WORKBENCH_LAYOUT["scrollable_main"] is True
-    assert GUI_THEME["surface"] == "#eef3f8"
+    assert GUI_THEME["surface"] == "#e8edf3"
     assert GUI_THEME["panel"] == "#ffffff"
-    assert GUI_THEME["primary"] == "#1f5eff"
-    assert GUI_THEME["border"] == "#d7e0ea"
-    assert GUI_THEME["text"] == "#172033"
+    assert GUI_THEME["panel_raised"] == "#fdfefe"
+    assert GUI_THEME["panel_muted"] == "#f5f7fb"
+    assert GUI_THEME["primary"] == "#2563eb"
+    assert GUI_THEME["primary_active"] == "#1d4ed8"
+    assert GUI_THEME["accent"] == "#0f766e"
+    assert GUI_THEME["success"] == "#188038"
+    assert GUI_THEME["warning"] == "#b7791f"
+    assert GUI_THEME["danger"] == "#b3261e"
+    assert GUI_THEME["focus"] == "#60a5fa"
+    assert GUI_THEME["border"] == "#cbd5e1"
+    assert GUI_THEME["border_strong"] == "#94a3b8"
+    assert GUI_THEME["text"] == "#111827"
+    assert GUI_THEME["table_header"] == "#dbe5f1"
+    assert GUI_THEME["section_header"] == "#f1f5f9"
 
 
 def test_gui_defines_tooltips_and_clear_confirmation_contract(tmp_path: Path) -> None:

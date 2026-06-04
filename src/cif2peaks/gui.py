@@ -58,16 +58,26 @@ GUI_PUBLICATION_PRESET_LABELS = tuple(
 APP_DISPLAY_NAME = "CIF2peaks"
 DEVELOPER_CREDIT = "Developed by Dr. GONG Delun"
 GUI_THEME = {
-    "surface": "#eef3f8",
+    "surface": "#e8edf3",
     "panel": "#ffffff",
-    "panel_alt": "#f7f9fc",
-    "primary": "#1f5eff",
-    "primary_active": "#1748c8",
-    "border": "#d7e0ea",
-    "text": "#172033",
-    "muted": "#5f6f83",
-    "subtle": "#8a98aa",
-    "table_header": "#e8eef6",
+    "panel_raised": "#fdfefe",
+    "panel_muted": "#f5f7fb",
+    "panel_alt": "#f8fafc",
+    "section_header": "#f1f5f9",
+    "status_bg": "#eef6ff",
+    "primary": "#2563eb",
+    "primary_active": "#1d4ed8",
+    "accent": "#0f766e",
+    "success": "#188038",
+    "warning": "#b7791f",
+    "danger": "#b3261e",
+    "focus": "#60a5fa",
+    "border": "#cbd5e1",
+    "border_strong": "#94a3b8",
+    "text": "#111827",
+    "muted": "#526070",
+    "subtle": "#7b8794",
+    "table_header": "#dbe5f1",
 }
 GUI_WORKBENCH_LAYOUT = {
     "geometry": "1200x760",
@@ -75,12 +85,21 @@ GUI_WORKBENCH_LAYOUT = {
     "sidebar_width": 330,
     "scrollable_main": True,
 }
+CIJ_TABLE_SIZE = 6
 GUI_TOOLTIP_KEYS = {
     "add_files": "tooltip_add_files",
     "add_folder": "tooltip_add_folder",
     "remove_selected": "tooltip_remove_selected",
     "clear_files": "tooltip_clear_files",
     "display_name": "tooltip_display_name",
+    "elastic_cubic": "tooltip_elastic_cubic",
+    "elastic_matrix": "tooltip_elastic_matrix",
+    "elastic_source": "tooltip_elastic_source",
+    "apply_elastic": "tooltip_apply_elastic",
+    "clear_elastic": "tooltip_clear_elastic",
+    "paste_elastic": "tooltip_paste_elastic",
+    "copy_elastic": "tooltip_copy_elastic",
+    "fill_cubic_elastic": "tooltip_fill_cubic_elastic",
     "output_file": "tooltip_output_file",
     "choose_output": "tooltip_choose_output",
     "xray_preset": "tooltip_xray_preset",
@@ -110,11 +129,22 @@ GUI_TEXT = {
         "display_name_label": "选中 CIF 显示名",
         "apply_display_name": "应用相名",
         "reset_display_name": "恢复文件名",
-        "elastic_cubic_label": "选中相 Cij (C11, C12, C44 / GPa)",
-        "elastic_matrix_label": "或粘贴完整 6x6 Cij 矩阵 (GPa)；坐标系默认 crystal_cartesian_from_cif_lattice",
+        "elastic_cubic_label": "选中相 Cij 快速填充 (C11, C12, C44 / GPa)",
+        "elastic_matrix_label": "6x6 Cij 表格 (GPa)，可从 Excel/Origin 直接粘贴",
         "elastic_source_label": "Cij 来源",
+        "fill_cubic_elastic": "填充立方",
+        "paste_elastic": "粘贴矩阵",
+        "copy_elastic": "复制矩阵",
         "apply_elastic": "应用 Cij",
         "clear_elastic": "清除 Cij",
+        "elastic_apply_failed_title": "Cij 输入无效",
+        "elastic_paste_failed_title": "粘贴 Cij 失败",
+        "elastic_status_empty": "Cij 状态：未应用",
+        "elastic_status_value": "Cij 状态：{status}",
+        "elastic_status_with_warning": "Cij 状态：{status} - {warning}",
+        "elastic_status_input_error": "Cij 输入错误：{warning}",
+        "elastic_status_ready_to_apply": "已填入 Cij，点击“应用 Cij”保存到当前相。",
+        "elastic_copied": "已复制 Cij 表格。",
         "add_files": "添加 CIF",
         "add_folder": "添加文件夹",
         "remove_selected": "移除选中",
@@ -190,6 +220,14 @@ GUI_TEXT = {
         "tooltip_remove_selected": "仅从当前列表移除选中的 CIF，不删除磁盘文件。",
         "tooltip_clear_files": "清空当前 CIF 列表和预览，不删除磁盘文件。",
         "tooltip_display_name": "为选中的 CIF 设置导出表中的相名；留空则使用文件名。",
+        "tooltip_elastic_cubic": "输入 C11,C12,C44 后点击“填充立方”，自动生成完整 6x6 Cij 表格。",
+        "tooltip_elastic_matrix": "逐格输入 Cij，或从 Excel、Origin、文本中复制完整 6x6 矩阵后粘贴。",
+        "tooltip_elastic_source": "记录该相 Cij 的文献、数据库或备注来源，会写入 Elastic Constants 工作表。",
+        "tooltip_apply_elastic": "校验并把当前 Cij 表格保存到选中的 CIF 相。",
+        "tooltip_clear_elastic": "清除选中 CIF 相已保存的 Cij，不删除 CIF 文件。",
+        "tooltip_paste_elastic": "从剪贴板读取完整 6x6 Cij 矩阵并填入表格。",
+        "tooltip_copy_elastic": "把当前 6x6 Cij 表格复制为制表符分隔文本。",
+        "tooltip_fill_cubic_elastic": "用 C11,C12,C44 生成立方晶系 Cij 矩阵并填入表格。",
         "tooltip_output_file": "Excel 工作簿保存路径；导出会写入该文件。",
         "tooltip_choose_output": "选择或更改 Excel 输出位置。",
         "tooltip_xray_preset": "选择常用 X 射线波长/能量；手动能量非空时优先使用手动值。",
@@ -219,11 +257,22 @@ GUI_TEXT = {
         "display_name_label": "Selected CIF display name",
         "apply_display_name": "Apply phase name",
         "reset_display_name": "Use file name",
-        "elastic_cubic_label": "Selected phase Cij (C11, C12, C44 / GPa)",
-        "elastic_matrix_label": "Or paste full 6x6 Cij matrix (GPa); frame defaults to crystal_cartesian_from_cif_lattice",
+        "elastic_cubic_label": "Selected phase Cij quick fill (C11, C12, C44 / GPa)",
+        "elastic_matrix_label": "6x6 Cij table (GPa); paste directly from Excel/Origin",
         "elastic_source_label": "Cij source",
+        "fill_cubic_elastic": "Fill cubic",
+        "paste_elastic": "Paste matrix",
+        "copy_elastic": "Copy matrix",
         "apply_elastic": "Apply Cij",
         "clear_elastic": "Clear Cij",
+        "elastic_apply_failed_title": "Invalid Cij input",
+        "elastic_paste_failed_title": "Cij paste failed",
+        "elastic_status_empty": "Cij status: not applied",
+        "elastic_status_value": "Cij status: {status}",
+        "elastic_status_with_warning": "Cij status: {status} - {warning}",
+        "elastic_status_input_error": "Cij input error: {warning}",
+        "elastic_status_ready_to_apply": "Cij table filled. Click Apply Cij to save it to the selected phase.",
+        "elastic_copied": "Copied the Cij table.",
         "add_files": "Add CIFs",
         "add_folder": "Add folder",
         "remove_selected": "Remove selected",
@@ -299,6 +348,14 @@ GUI_TEXT = {
         "tooltip_remove_selected": "Remove selected CIFs from this list only; source files are not deleted.",
         "tooltip_clear_files": "Clear the current CIF list and preview; source files are not deleted.",
         "tooltip_display_name": "Set the phase name used in exported tables; leave blank to use the file name.",
+        "tooltip_elastic_cubic": "Enter C11,C12,C44 and click Fill cubic to generate a full 6x6 Cij table.",
+        "tooltip_elastic_matrix": "Enter Cij cell by cell, or paste a full 6x6 matrix copied from Excel, Origin, or text.",
+        "tooltip_elastic_source": "Record the literature, database, or note source for this phase's Cij; it is exported in the Elastic Constants sheet.",
+        "tooltip_apply_elastic": "Validate and save the current Cij table to the selected CIF phase.",
+        "tooltip_clear_elastic": "Clear the saved Cij for the selected CIF phase without deleting the CIF file.",
+        "tooltip_paste_elastic": "Read a full 6x6 Cij matrix from the clipboard and fill the table.",
+        "tooltip_copy_elastic": "Copy the current 6x6 Cij table as tab-separated text.",
+        "tooltip_fill_cubic_elastic": "Use C11,C12,C44 to generate a cubic Cij matrix and fill the table.",
         "tooltip_output_file": "Excel workbook path that will be written during export.",
         "tooltip_choose_output": "Choose or change the Excel output location.",
         "tooltip_xray_preset": "Select a common X-ray wavelength/energy; manual energy takes priority when filled.",
@@ -451,33 +508,112 @@ def _elastic_cubic_summary(elastic: ElasticConstants | None) -> str:
     return f"{c11:g}, {c12:g}, {c44:g}"
 
 
+def _parse_finite_cij_value(value: object, label: str) -> float:
+    try:
+        number = float(str(value).strip())
+    except ValueError as exc:
+        raise ValueError(f"{label} must be a number.") from exc
+    if not math.isfinite(number):
+        raise ValueError(f"{label} must be a finite number.")
+    return number
+
+
 def _parse_cubic_cij(text: str, source: str = "") -> ElasticConstants:
     values = [item for item in re.split(r"[\s,;]+", text.strip()) if item]
     if len(values) != 3:
         raise ValueError("Enter exactly three Cij values: C11, C12, C44 in GPa.")
-    c11, c12, c44 = (float(value) for value in values)
+    c11, c12, c44 = (
+        _parse_finite_cij_value(value, label)
+        for value, label in zip(values, ("C11", "C12", "C44"), strict=True)
+    )
     return ElasticConstants.from_cubic(c11_GPa=c11, c12_GPa=c12, c44_GPa=c44, source=source.strip())
 
 
-def _parse_full_cij_matrix(text: str, source: str = "") -> ElasticConstants:
+def _blank_cij_table_values() -> list[list[str]]:
+    return [["" for _column in range(CIJ_TABLE_SIZE)] for _row in range(CIJ_TABLE_SIZE)]
+
+
+def _parse_cij_paste_matrix(text: str) -> list[list[str]]:
     rows = [[value for value in re.split(r"[\s,;]+", line.strip()) if value] for line in text.strip().splitlines() if line.strip()]
-    if len(rows) == 1 and len(rows[0]) == 36:
-        flat = [float(value) for value in rows[0]]
-        matrix = [flat[index : index + 6] for index in range(0, 36, 6)]
-    elif len(rows) == 6 and all(len(row) == 6 for row in rows):
-        matrix = [[float(value) for value in row] for row in rows]
-    else:
-        raise ValueError("Paste a full 6x6 Cij matrix: six rows with six GPa values per row.")
+    flat_count = CIJ_TABLE_SIZE * CIJ_TABLE_SIZE
+    if len(rows) == 1 and len(rows[0]) == flat_count:
+        flat = rows[0]
+        return [flat[index : index + CIJ_TABLE_SIZE] for index in range(0, flat_count, CIJ_TABLE_SIZE)]
+    if len(rows) == CIJ_TABLE_SIZE and all(len(row) == CIJ_TABLE_SIZE for row in rows):
+        return rows
+    raise ValueError("Paste a full 6x6 Cij matrix: six rows with six GPa values per row.")
+
+
+def _parse_cij_table_values(values: Sequence[Sequence[object]], source: str = "") -> ElasticConstants:
+    rows = [list(row) for row in values]
+    if len(rows) != CIJ_TABLE_SIZE or any(len(row) != CIJ_TABLE_SIZE for row in rows):
+        raise ValueError("Cij table must be 6x6: enter six rows with six GPa values per row.")
+
+    matrix: list[list[float]] = []
+    for row_index, row in enumerate(rows, start=1):
+        parsed_row: list[float] = []
+        for column_index, value in enumerate(row, start=1):
+            label = f"C{row_index}{column_index}"
+            text = str(value).strip()
+            if not text:
+                raise ValueError(f"{label} is required.")
+            parsed_row.append(_parse_finite_cij_value(text, label))
+        matrix.append(parsed_row)
     return ElasticConstants.from_matrix(matrix, source=source.strip())
 
 
-def _format_cij_matrix(elastic: ElasticConstants | None) -> str:
+def _parse_full_cij_matrix(text: str, source: str = "") -> ElasticConstants:
+    try:
+        values = _parse_cij_paste_matrix(text)
+    except ValueError:
+        raise ValueError("Paste a full 6x6 Cij matrix: six rows with six GPa values per row.") from None
+    return _parse_cij_table_values(values, source=source)
+
+
+def _format_cij_number(value: object) -> str:
+    number = float(value)
+    if abs(number) < 1e-12:
+        number = 0.0
+    return f"{number:g}"
+
+
+def _format_cij_table_values(elastic: ElasticConstants | None) -> list[list[str]]:
     if elastic is None or not elastic.stiffness_GPa:
-        return ""
+        return _blank_cij_table_values()
     matrix = elastic.stiffness_matrix_GPa
-    if matrix.shape != (6, 6):
+    if matrix.shape != (CIJ_TABLE_SIZE, CIJ_TABLE_SIZE):
+        return _blank_cij_table_values()
+    return [[_format_cij_number(matrix[row, column]) for column in range(CIJ_TABLE_SIZE)] for row in range(CIJ_TABLE_SIZE)]
+
+
+def _cubic_cij_table_values(text: str) -> list[list[str]]:
+    return _format_cij_table_values(_parse_cubic_cij(text))
+
+
+def _format_cij_matrix(elastic: ElasticConstants | None) -> str:
+    values = _format_cij_table_values(elastic)
+    if not any(any(cell for cell in row) for row in values):
         return ""
-    return "\n".join(" ".join(f"{float(value):g}" for value in row) for row in matrix)
+    return "\n".join(" ".join(row) for row in values)
+
+
+def _elastic_status_feedback(elastic: ElasticConstants | None, language: str = "zh") -> str:
+    if elastic is None:
+        return _gui_text(language, "elastic_status_empty")
+    warnings = " | ".join(elastic.warnings)
+    if warnings:
+        return _gui_text(language, "elastic_status_with_warning", status=elastic.status, warning=warnings)
+    return _gui_text(language, "elastic_status_value", status=elastic.status)
+
+
+def _elastic_status_style_name(elastic: ElasticConstants | None) -> str:
+    if elastic is None:
+        return "ElasticMuted.TLabel"
+    if elastic.status == "invalid_elastic_constants":
+        return "ElasticError.TLabel"
+    if elastic.status == "valid_with_warnings":
+        return "ElasticWarning.TLabel"
+    return "ElasticValid.TLabel"
 
 
 def _safe_filename_stem(value: str) -> str:
@@ -502,28 +638,102 @@ def _configure_workbench_theme(root: object, style: object) -> None:
     style.configure("TFrame", background=GUI_THEME["surface"])
     style.configure("Workbench.TFrame", background=GUI_THEME["surface"])
     style.configure("Header.TFrame", background=GUI_THEME["surface"])
-    style.configure("Card.TFrame", background=GUI_THEME["panel"], relief="solid", borderwidth=1)
-    style.configure("CardBody.TFrame", background=GUI_THEME["panel"])
-    style.configure("Toolbar.TFrame", background=GUI_THEME["panel"])
+    style.configure(
+        "Card.TFrame",
+        background=GUI_THEME["panel_raised"],
+        relief="solid",
+        borderwidth=1,
+        bordercolor=GUI_THEME["border"],
+        lightcolor=GUI_THEME["panel"],
+        darkcolor=GUI_THEME["border"],
+    )
+    style.configure("CardBody.TFrame", background=GUI_THEME["panel_raised"])
+    style.configure("PanelMuted.TFrame", background=GUI_THEME["panel_muted"])
+    style.configure("Toolbar.TFrame", background=GUI_THEME["panel_raised"])
+    style.configure("SectionHeader.TFrame", background=GUI_THEME["section_header"])
+    style.configure("DataAccent.TFrame", background=GUI_THEME["accent"])
+    style.configure("SettingsAccent.TFrame", background=GUI_THEME["primary"])
+    style.configure("PreviewAccent.TFrame", background=GUI_THEME["success"])
+    style.configure("Status.TFrame", background=GUI_THEME["status_bg"], relief="solid", borderwidth=1)
     style.configure("Footer.TFrame", background=GUI_THEME["surface"])
     style.configure("TLabel", background=GUI_THEME["surface"], foreground=GUI_THEME["text"])
-    style.configure("Card.TLabel", background=GUI_THEME["panel"], foreground=GUI_THEME["text"])
-    style.configure("Title.TLabel", font=("Microsoft YaHei UI", 24, "bold"), foreground=GUI_THEME["text"])
-    style.configure("Section.TLabel", font=("Microsoft YaHei UI", 12, "bold"), background=GUI_THEME["panel"], foreground=GUI_THEME["text"])
+    style.configure("Card.TLabel", background=GUI_THEME["panel_raised"], foreground=GUI_THEME["text"])
+    style.configure("Title.TLabel", font=("Microsoft YaHei UI", 22, "bold"), foreground=GUI_THEME["text"])
+    style.configure(
+        "Section.TLabel",
+        font=("Microsoft YaHei UI", 12, "bold"),
+        background=GUI_THEME["panel_raised"],
+        foreground=GUI_THEME["text"],
+    )
+    style.configure(
+        "SectionTitle.TLabel",
+        font=("Microsoft YaHei UI", 12, "bold"),
+        background=GUI_THEME["section_header"],
+        foreground=GUI_THEME["text"],
+    )
     style.configure("Subtitle.TLabel", font=("Microsoft YaHei UI", 10), foreground=GUI_THEME["muted"])
-    style.configure("CardSubtitle.TLabel", font=("Microsoft YaHei UI", 9), background=GUI_THEME["panel"], foreground=GUI_THEME["muted"])
+    style.configure("CardSubtitle.TLabel", font=("Microsoft YaHei UI", 9), background=GUI_THEME["panel_raised"], foreground=GUI_THEME["muted"])
     style.configure("Credit.TLabel", font=("Microsoft YaHei UI", 9), foreground=GUI_THEME["subtle"])
-    style.configure("Primary.TButton", font=("Microsoft YaHei UI", 11, "bold"), padding=(20, 11), foreground="#ffffff")
-    style.map("Primary.TButton", background=[("active", GUI_THEME["primary_active"]), ("!disabled", GUI_THEME["primary"])])
-    style.configure("Action.TButton", padding=(10, 6))
-    style.configure("Language.TButton", padding=(12, 6))
-    style.configure("Workbench.Treeview", rowheight=28, fieldbackground=GUI_THEME["panel"], background=GUI_THEME["panel"], foreground=GUI_THEME["text"])
+    style.configure("Status.TLabel", font=("Microsoft YaHei UI", 10), background=GUI_THEME["status_bg"], foreground=GUI_THEME["muted"])
+    style.configure("ElasticMuted.TLabel", font=("Microsoft YaHei UI", 9), background=GUI_THEME["panel_raised"], foreground=GUI_THEME["muted"])
+    style.configure("ElasticValid.TLabel", font=("Microsoft YaHei UI", 9), background=GUI_THEME["panel_raised"], foreground=GUI_THEME["success"])
+    style.configure("ElasticWarning.TLabel", font=("Microsoft YaHei UI", 9), background=GUI_THEME["panel_raised"], foreground=GUI_THEME["warning"])
+    style.configure("ElasticError.TLabel", font=("Microsoft YaHei UI", 9), background=GUI_THEME["panel_raised"], foreground=GUI_THEME["danger"])
+    style.configure("TEntry", padding=(5, 4), fieldbackground=GUI_THEME["panel"], bordercolor=GUI_THEME["border"])
+    style.map(
+        "TEntry",
+        bordercolor=[("focus", GUI_THEME["focus"]), ("!disabled", GUI_THEME["border"])],
+        fieldbackground=[("disabled", GUI_THEME["panel_muted"]), ("!disabled", GUI_THEME["panel"])],
+        foreground=[("disabled", GUI_THEME["subtle"]), ("!disabled", GUI_THEME["text"])],
+    )
+    style.configure("TCombobox", padding=(5, 4), fieldbackground=GUI_THEME["panel"], bordercolor=GUI_THEME["border"])
+    style.map(
+        "TCombobox",
+        bordercolor=[("focus", GUI_THEME["focus"]), ("!disabled", GUI_THEME["border"])],
+        fieldbackground=[("readonly", GUI_THEME["panel"])],
+        selectbackground=[("readonly", GUI_THEME["panel"])],
+        selectforeground=[("readonly", GUI_THEME["text"])],
+    )
+    style.configure("TCheckbutton", background=GUI_THEME["panel_raised"], foreground=GUI_THEME["text"], padding=(0, 2))
+    style.map("TCheckbutton", foreground=[("disabled", GUI_THEME["subtle"]), ("!disabled", GUI_THEME["text"])])
+    style.configure("Primary.TButton", font=("Microsoft YaHei UI", 11, "bold"), padding=(22, 12), foreground="#ffffff")
+    style.map(
+        "Primary.TButton",
+        background=[
+            ("disabled", GUI_THEME["border_strong"]),
+            ("active", GUI_THEME["primary_active"]),
+            ("!disabled", GUI_THEME["primary"]),
+        ],
+        foreground=[("disabled", GUI_THEME["panel_muted"]), ("!disabled", "#ffffff")],
+    )
+    style.configure("Action.TButton", padding=(10, 6), foreground=GUI_THEME["text"])
+    style.map(
+        "Action.TButton",
+        background=[("active", GUI_THEME["panel_muted"]), ("!disabled", GUI_THEME["panel"])],
+        foreground=[("disabled", GUI_THEME["subtle"]), ("active", GUI_THEME["primary"]), ("!disabled", GUI_THEME["text"])],
+    )
+    style.configure("Language.TButton", padding=(12, 6), foreground=GUI_THEME["muted"])
+    style.map("Language.TButton", foreground=[("active", GUI_THEME["primary"]), ("!disabled", GUI_THEME["muted"])])
+    style.configure(
+        "Workbench.Treeview",
+        rowheight=30,
+        fieldbackground=GUI_THEME["panel"],
+        background=GUI_THEME["panel"],
+        foreground=GUI_THEME["text"],
+        bordercolor=GUI_THEME["border"],
+    )
+    style.map(
+        "Workbench.Treeview",
+        background=[("selected", GUI_THEME["primary"])],
+        foreground=[("selected", "#ffffff")],
+    )
     style.configure(
         "Workbench.Treeview.Heading",
         font=("Microsoft YaHei UI", 10, "bold"),
         background=GUI_THEME["table_header"],
         foreground=GUI_THEME["text"],
         relief="flat",
+        padding=(8, 7),
     )
 
 
@@ -1098,6 +1308,7 @@ def _launch_tk_app(initial_paths: Sequence[str | Path] = ()) -> None:
     display_name_var = tk.StringVar(value="")
     elastic_cubic_var = tk.StringVar(value="")
     elastic_source_var = tk.StringVar(value="")
+    elastic_status_var = tk.StringVar(value="")
     xray_preset_var = tk.StringVar(value=GUI_XRAY_PRESET_LABELS[0])
     energy_var = tk.StringVar(value="")
     min_var = tk.StringVar(value="")
@@ -1202,16 +1413,26 @@ def _launch_tk_app(initial_paths: Sequence[str | Path] = ()) -> None:
     main.rowconfigure(0, weight=0)
     main.rowconfigure(1, weight=1)
 
-    files_panel = ttk.Frame(main, padding=14, style="Card.TFrame")
+    def make_section_header(parent: object, accent_style: str) -> tuple[object, object]:
+        header = ttk.Frame(parent, style="SectionHeader.TFrame", padding=(10, 6, 10, 6))
+        header.columnconfigure(1, weight=1)
+        accent_strip = ttk.Frame(header, width=5, style=accent_style)
+        accent_strip.grid(row=0, column=0, sticky="ns", padx=(0, 10), pady=(2, 2))
+        accent_strip.grid_propagate(False)
+        title = ttk.Label(header, style="SectionTitle.TLabel")
+        title.grid(row=0, column=1, sticky="w")
+        return header, title
+
+    files_panel = ttk.Frame(main, padding=16, style="Card.TFrame")
     files_panel.grid(row=0, column=0, rowspan=2, sticky="nsew", padx=(0, 14))
     files_panel.columnconfigure(0, weight=1)
     files_panel.rowconfigure(6, weight=1)
 
-    files_panel_title = ttk.Label(files_panel, style="Section.TLabel")
-    files_panel_title.grid(row=0, column=0, columnspan=2, sticky="w", pady=(0, 2))
+    files_panel_header, files_panel_title = make_section_header(files_panel, "DataAccent.TFrame")
+    files_panel_header.grid(row=0, column=0, columnspan=2, sticky="ew", pady=(0, 10))
 
     file_buttons = ttk.Frame(files_panel, style="Toolbar.TFrame")
-    file_buttons.grid(row=1, column=0, sticky="ew", pady=(8, 10))
+    file_buttons.grid(row=1, column=0, sticky="ew", pady=(0, 10))
     file_buttons.columnconfigure(3, weight=1)
 
     ttk.Label(files_panel, textvariable=input_summary_var, style="Card.TLabel").grid(row=2, column=0, sticky="w")
@@ -1231,33 +1452,70 @@ def _launch_tk_app(initial_paths: Sequence[str | Path] = ()) -> None:
 
     elastic_frame = ttk.Frame(files_panel, style="CardBody.TFrame")
     elastic_frame.grid(row=5, column=0, columnspan=2, sticky="ew", pady=(0, 10))
-    elastic_frame.columnconfigure(1, weight=1)
+    elastic_frame.columnconfigure(0, weight=1)
     elastic_label = ttk.Label(elastic_frame, style="Card.TLabel")
-    elastic_label.grid(row=0, column=0, columnspan=4, sticky="w")
-    elastic_entry = ttk.Entry(elastic_frame, textvariable=elastic_cubic_var)
-    elastic_entry.grid(row=1, column=0, columnspan=2, sticky="ew", pady=(4, 0), padx=(0, 6))
+    elastic_label.grid(row=0, column=0, sticky="w")
+    elastic_quick_frame = ttk.Frame(elastic_frame, style="CardBody.TFrame")
+    elastic_quick_frame.grid(row=1, column=0, sticky="ew", pady=(4, 0))
+    elastic_quick_frame.columnconfigure(0, weight=1)
+    elastic_entry = ttk.Entry(elastic_quick_frame, textvariable=elastic_cubic_var)
+    elastic_entry.grid(row=0, column=0, sticky="ew", padx=(0, 6))
+    fill_cubic_button = ttk.Button(elastic_quick_frame, style="Action.TButton")
+    fill_cubic_button.grid(row=0, column=1)
     elastic_matrix_label = ttk.Label(elastic_frame, style="Card.TLabel")
-    elastic_matrix_label.grid(row=2, column=0, columnspan=4, sticky="w", pady=(6, 0))
-    elastic_matrix_text = tk.Text(
-        elastic_frame,
-        height=4,
-        width=34,
-        bd=0,
-        highlightthickness=1,
-        highlightbackground=GUI_THEME["border"],
-        highlightcolor=GUI_THEME["primary"],
-        bg=GUI_THEME["panel_alt"],
-        fg=GUI_THEME["text"],
-    )
-    elastic_matrix_text.grid(row=3, column=0, columnspan=4, sticky="ew", pady=(4, 0))
-    elastic_source_label = ttk.Label(elastic_frame, style="Card.TLabel")
-    elastic_source_label.grid(row=4, column=0, sticky="w", pady=(6, 0), padx=(0, 6))
-    elastic_source_entry = ttk.Entry(elastic_frame, textvariable=elastic_source_var)
-    elastic_source_entry.grid(row=4, column=1, sticky="ew", pady=(6, 0), padx=(0, 6))
-    apply_elastic_button = ttk.Button(elastic_frame, style="Action.TButton")
-    apply_elastic_button.grid(row=4, column=2, pady=(6, 0), padx=(0, 6))
-    clear_elastic_button = ttk.Button(elastic_frame, style="Action.TButton")
-    clear_elastic_button.grid(row=4, column=3, pady=(6, 0))
+    elastic_matrix_label.grid(row=2, column=0, sticky="w", pady=(6, 0))
+    elastic_cell_vars = [[tk.StringVar(value="") for _column in range(CIJ_TABLE_SIZE)] for _row in range(CIJ_TABLE_SIZE)]
+    elastic_cell_entries: list[list[object]] = []
+    elastic_grid_frame = ttk.Frame(elastic_frame, style="CardBody.TFrame")
+    elastic_grid_frame.grid(row=3, column=0, sticky="ew", pady=(4, 0))
+    for column in range(CIJ_TABLE_SIZE + 1):
+        elastic_grid_frame.columnconfigure(column, weight=0)
+    ttk.Label(elastic_grid_frame, text="", style="CardSubtitle.TLabel", width=3).grid(row=0, column=0)
+    for column in range(CIJ_TABLE_SIZE):
+        ttk.Label(elastic_grid_frame, text=str(column + 1), style="CardSubtitle.TLabel", width=5, anchor="center").grid(
+            row=0,
+            column=column + 1,
+            padx=1,
+            pady=(0, 2),
+        )
+    for row in range(CIJ_TABLE_SIZE):
+        ttk.Label(elastic_grid_frame, text=str(row + 1), style="CardSubtitle.TLabel", width=3, anchor="center").grid(
+            row=row + 1,
+            column=0,
+            padx=(0, 2),
+        )
+        entry_row: list[object] = []
+        for column in range(CIJ_TABLE_SIZE):
+            cell_entry = ttk.Entry(
+                elastic_grid_frame,
+                textvariable=elastic_cell_vars[row][column],
+                width=5,
+                justify="center",
+            )
+            cell_entry.grid(row=row + 1, column=column + 1, padx=1, pady=1)
+            entry_row.append(cell_entry)
+        elastic_cell_entries.append(entry_row)
+    elastic_matrix_buttons = ttk.Frame(elastic_frame, style="CardBody.TFrame")
+    elastic_matrix_buttons.grid(row=4, column=0, sticky="ew", pady=(6, 0))
+    paste_elastic_button = ttk.Button(elastic_matrix_buttons, style="Action.TButton")
+    paste_elastic_button.grid(row=0, column=0, padx=(0, 6))
+    copy_elastic_button = ttk.Button(elastic_matrix_buttons, style="Action.TButton")
+    copy_elastic_button.grid(row=0, column=1)
+    elastic_source_frame = ttk.Frame(elastic_frame, style="CardBody.TFrame")
+    elastic_source_frame.grid(row=5, column=0, sticky="ew", pady=(6, 0))
+    elastic_source_frame.columnconfigure(1, weight=1)
+    elastic_source_label = ttk.Label(elastic_source_frame, style="Card.TLabel")
+    elastic_source_label.grid(row=0, column=0, sticky="w", padx=(0, 6))
+    elastic_source_entry = ttk.Entry(elastic_source_frame, textvariable=elastic_source_var)
+    elastic_source_entry.grid(row=0, column=1, sticky="ew")
+    elastic_status_label = ttk.Label(elastic_frame, textvariable=elastic_status_var, style="ElasticMuted.TLabel", wraplength=300)
+    elastic_status_label.grid(row=6, column=0, sticky="ew", pady=(6, 0))
+    elastic_action_frame = ttk.Frame(elastic_frame, style="CardBody.TFrame")
+    elastic_action_frame.grid(row=7, column=0, sticky="ew", pady=(6, 0))
+    apply_elastic_button = ttk.Button(elastic_action_frame, style="Action.TButton")
+    apply_elastic_button.grid(row=0, column=0, padx=(0, 6))
+    clear_elastic_button = ttk.Button(elastic_action_frame, style="Action.TButton")
+    clear_elastic_button.grid(row=0, column=1)
 
     listbox = tk.Listbox(
         files_panel,
@@ -1266,8 +1524,8 @@ def _launch_tk_app(initial_paths: Sequence[str | Path] = ()) -> None:
         bd=0,
         highlightthickness=1,
         highlightbackground=GUI_THEME["border"],
-        highlightcolor=GUI_THEME["primary"],
-        bg=GUI_THEME["panel_alt"],
+        highlightcolor=GUI_THEME["focus"],
+        bg=GUI_THEME["panel_muted"],
         fg=GUI_THEME["text"],
         selectbackground=GUI_THEME["primary"],
         selectforeground="#ffffff",
@@ -1287,8 +1545,13 @@ def _launch_tk_app(initial_paths: Sequence[str | Path] = ()) -> None:
         reset_name_button.configure(state=selection_state)
         display_name_entry.configure(state=selection_state)
         elastic_entry.configure(state=selection_state)
-        elastic_matrix_text.configure(state=selection_state)
+        for entry_row in elastic_cell_entries:
+            for cell_entry in entry_row:
+                cell_entry.configure(state=selection_state)
         elastic_source_entry.configure(state=selection_state)
+        fill_cubic_button.configure(state=selection_state)
+        paste_elastic_button.configure(state=selection_state)
+        copy_elastic_button.configure(state=selection_state)
         apply_elastic_button.configure(state=selection_state)
         clear_elastic_button.configure(state=selection_state)
         clear_button.configure(state=tk.NORMAL if has_files else tk.DISABLED)
@@ -1347,6 +1610,8 @@ def _launch_tk_app(initial_paths: Sequence[str | Path] = ()) -> None:
         display_name_var.set("")
         elastic_cubic_var.set("")
         elastic_source_var.set("")
+        clear_cij_table_values()
+        set_elastic_status_feedback(None)
         tree.delete(*tree.get_children())
         refresh_list()
         append_activity(_gui_text(lang(), "log_cleared"))
@@ -1371,17 +1636,42 @@ def _launch_tk_app(initial_paths: Sequence[str | Path] = ()) -> None:
             return None
         return selected_paths[index]
 
+    def current_cij_table_values() -> list[list[str]]:
+        return [[elastic_cell_vars[row][column].get() for column in range(CIJ_TABLE_SIZE)] for row in range(CIJ_TABLE_SIZE)]
+
+    def set_cij_table_values(values: Sequence[Sequence[object]]) -> None:
+        rows = [list(row) for row in values]
+        for row in range(CIJ_TABLE_SIZE):
+            for column in range(CIJ_TABLE_SIZE):
+                value = "" if row >= len(rows) or column >= len(rows[row]) else str(rows[row][column])
+                elastic_cell_vars[row][column].set(value)
+
+    def clear_cij_table_values() -> None:
+        set_cij_table_values(_blank_cij_table_values())
+
+    def cij_table_has_any_value() -> bool:
+        return any(cell.strip() for row in current_cij_table_values() for cell in row)
+
+    def set_elastic_status_message(message: str, style_name: str = "ElasticMuted.TLabel") -> None:
+        elastic_status_var.set(message)
+        elastic_status_label.configure(style=style_name)
+
+    def set_elastic_status_feedback(elastic: ElasticConstants | None) -> None:
+        set_elastic_status_message(_elastic_status_feedback(elastic, lang()), _elastic_status_style_name(elastic))
+
+    def mark_cij_table_dirty(_event: object | None = None) -> None:
+        if selected_display_path() is not None:
+            set_elastic_status_message(_gui_text(lang(), "elastic_status_ready_to_apply"), "ElasticWarning.TLabel")
+
     def sync_display_name_entry() -> None:
         path = selected_display_path()
         display_name_var.set("" if path is None else display_names.get(path, path.name))
         elastic = None if path is None else elastic_constants.get(path)
         cubic_summary = _elastic_cubic_summary(elastic)
         elastic_cubic_var.set(cubic_summary)
-        elastic_matrix_text.configure(state=tk.NORMAL)
-        elastic_matrix_text.delete("1.0", tk.END)
-        if elastic is not None and not cubic_summary:
-            elastic_matrix_text.insert("1.0", _format_cij_matrix(elastic))
+        set_cij_table_values(_format_cij_table_values(elastic))
         elastic_source_var.set("" if elastic is None else elastic.source)
+        set_elastic_status_feedback(elastic)
         set_file_action_states()
 
     def apply_display_name() -> None:
@@ -1398,19 +1688,66 @@ def _launch_tk_app(initial_paths: Sequence[str | Path] = ()) -> None:
         display_names[path] = path.name
         refresh_list()
 
+    def fill_cubic_cij_table() -> str | None:
+        try:
+            set_cij_table_values(_cubic_cij_table_values(elastic_cubic_var.get()))
+        except Exception as exc:
+            set_elastic_status_message(
+                _gui_text(lang(), "elastic_status_input_error", warning=str(exc)),
+                "ElasticError.TLabel",
+            )
+            messagebox.showerror(_gui_text(lang(), "elastic_apply_failed_title"), str(exc))
+            return "break"
+        set_elastic_status_message(_gui_text(lang(), "elastic_status_ready_to_apply"), "ElasticWarning.TLabel")
+        return "break"
+
+    def paste_elastic_matrix() -> str | None:
+        try:
+            clipboard_text = root.clipboard_get()
+            values = _parse_cij_paste_matrix(str(clipboard_text))
+        except Exception as exc:
+            set_elastic_status_message(
+                _gui_text(lang(), "elastic_status_input_error", warning=str(exc)),
+                "ElasticError.TLabel",
+            )
+            messagebox.showerror(_gui_text(lang(), "elastic_paste_failed_title"), str(exc))
+            return "break"
+        set_cij_table_values(values)
+        set_elastic_status_message(_gui_text(lang(), "elastic_status_ready_to_apply"), "ElasticWarning.TLabel")
+        return "break"
+
+    def paste_elastic_matrix_from_cell(_event: object | None = None) -> str | None:
+        try:
+            clipboard_text = root.clipboard_get()
+            values = _parse_cij_paste_matrix(str(clipboard_text))
+        except Exception:
+            return None
+        set_cij_table_values(values)
+        set_elastic_status_message(_gui_text(lang(), "elastic_status_ready_to_apply"), "ElasticWarning.TLabel")
+        return "break"
+
+    def copy_elastic_matrix() -> None:
+        text = "\n".join("\t".join(row) for row in current_cij_table_values())
+        root.clipboard_clear()
+        root.clipboard_append(text)
+        set_elastic_status_message(_gui_text(lang(), "elastic_copied"), "ElasticMuted.TLabel")
+
     def apply_elastic_constants() -> None:
         path = selected_display_path()
         if path is None:
             return
         try:
-            full_matrix_text = elastic_matrix_text.get("1.0", tk.END).strip()
-            elastic_constants[path] = (
-                _parse_full_cij_matrix(full_matrix_text, elastic_source_var.get())
-                if full_matrix_text
-                else _parse_cubic_cij(elastic_cubic_var.get(), elastic_source_var.get())
-            )
+            if not cij_table_has_any_value() and elastic_cubic_var.get().strip():
+                set_cij_table_values(_cubic_cij_table_values(elastic_cubic_var.get()))
+            elastic = _parse_cij_table_values(current_cij_table_values(), elastic_source_var.get())
+            elastic_constants[path] = elastic
+            set_elastic_status_feedback(elastic)
         except Exception as exc:
-            messagebox.showerror(_gui_text(lang(), "export_failed_title"), str(exc))
+            set_elastic_status_message(
+                _gui_text(lang(), "elastic_status_input_error", warning=str(exc)),
+                "ElasticError.TLabel",
+            )
+            messagebox.showerror(_gui_text(lang(), "elastic_apply_failed_title"), str(exc))
             return
         refresh_list()
 
@@ -1420,14 +1757,19 @@ def _launch_tk_app(initial_paths: Sequence[str | Path] = ()) -> None:
             return
         elastic_constants.pop(path, None)
         elastic_cubic_var.set("")
-        elastic_matrix_text.delete("1.0", tk.END)
+        clear_cij_table_values()
         elastic_source_var.set("")
+        set_elastic_status_feedback(None)
         refresh_list()
 
     listbox.bind("<<ListboxSelect>>", lambda _event: sync_display_name_entry())
     listbox.bind("<Double-Button-1>", lambda _event: display_name_entry.focus_set())
     display_name_entry.bind("<Return>", lambda _event: apply_display_name())
-    elastic_entry.bind("<Return>", lambda _event: apply_elastic_constants())
+    elastic_entry.bind("<Return>", lambda _event: fill_cubic_cij_table())
+    for entry_row in elastic_cell_entries:
+        for cell_entry in entry_row:
+            cell_entry.bind("<<Paste>>", paste_elastic_matrix_from_cell)
+            cell_entry.bind("<KeyRelease>", mark_cij_table_dirty, add="+")
 
     add_files_button = ttk.Button(file_buttons, command=add_files, style="Action.TButton")
     add_files_button.grid(row=0, column=0, padx=(0, 6))
@@ -1439,15 +1781,18 @@ def _launch_tk_app(initial_paths: Sequence[str | Path] = ()) -> None:
     clear_button.grid(row=0, column=3, sticky="w")
     apply_name_button.configure(command=apply_display_name)
     reset_name_button.configure(command=reset_display_name)
+    fill_cubic_button.configure(command=fill_cubic_cij_table)
+    paste_elastic_button.configure(command=paste_elastic_matrix)
+    copy_elastic_button.configure(command=copy_elastic_matrix)
     apply_elastic_button.configure(command=apply_elastic_constants)
     clear_elastic_button.configure(command=clear_elastic_constants)
 
-    settings_panel = ttk.Frame(main, padding=14, style="Card.TFrame")
+    settings_panel = ttk.Frame(main, padding=16, style="Card.TFrame")
     settings_panel.grid(row=0, column=1, sticky="nsew")
     settings_panel.columnconfigure(1, weight=1)
 
-    settings_panel_title = ttk.Label(settings_panel, style="Section.TLabel")
-    settings_panel_title.grid(row=0, column=0, columnspan=2, sticky="w", pady=(0, 2))
+    settings_panel_header, settings_panel_title = make_section_header(settings_panel, "SettingsAccent.TFrame")
+    settings_panel_header.grid(row=0, column=0, columnspan=2, sticky="ew", pady=(0, 8))
     ttk.Label(settings_panel, textvariable=settings_summary_var, style="CardSubtitle.TLabel").grid(
         row=1, column=0, columnspan=2, sticky="w", pady=(0, 12)
     )
@@ -1551,14 +1896,14 @@ def _launch_tk_app(initial_paths: Sequence[str | Path] = ()) -> None:
     min_var.trace_add("write", lambda *_: update_settings_summary())
     max_var.trace_add("write", lambda *_: update_settings_summary())
 
-    preview_panel = ttk.Frame(main, padding=14, style="Card.TFrame")
+    preview_panel = ttk.Frame(main, padding=16, style="Card.TFrame")
     preview_panel.grid(row=1, column=1, sticky="nsew", pady=(14, 0))
     preview_panel.columnconfigure(0, weight=1)
     preview_panel.rowconfigure(1, weight=1)
     preview_panel.rowconfigure(3, weight=0)
 
-    preview_panel_title = ttk.Label(preview_panel, style="Section.TLabel")
-    preview_panel_title.grid(row=0, column=0, sticky="w", pady=(0, 10))
+    preview_panel_header, preview_panel_title = make_section_header(preview_panel, "PreviewAccent.TFrame")
+    preview_panel_header.grid(row=0, column=0, columnspan=2, sticky="ew", pady=(0, 10))
 
     columns = ("display_name", "formula", "space_group", "peaks", "warning", "elastic")
     tree = ttk.Treeview(preview_panel, columns=columns, show="headings", height=10, style="Workbench.Treeview")
@@ -1576,6 +1921,19 @@ def _launch_tk_app(initial_paths: Sequence[str | Path] = ()) -> None:
     tree_scroll = ttk.Scrollbar(preview_panel, orient="vertical", command=tree.yview)
     tree_scroll.grid(row=1, column=1, sticky="ns")
     tree.configure(yscrollcommand=tree_scroll.set)
+    tree.tag_configure("ok", foreground=GUI_THEME["text"])
+    tree.tag_configure("warning", foreground=GUI_THEME["warning"])
+    tree.tag_configure("failed", foreground=GUI_THEME["danger"])
+
+    def tree_tags_for_phase_row(row: Sequence[object]) -> tuple[str, ...]:
+        warning_text = str(row[4]).strip() if len(row) > 4 else ""
+        status_text = str(row[3]).strip().casefold() if len(row) > 3 else ""
+        if warning_text and ("无法" in status_text or "cannot" in status_text or status_text == "0"):
+            return ("failed",)
+        if warning_text:
+            return ("warning",)
+        return ("ok",)
+
     activity_log_label = ttk.Label(preview_panel, style="Card.TLabel")
     activity_log_label.grid(row=2, column=0, sticky="w", pady=(10, 4))
     activity_listbox = tk.Listbox(
@@ -1584,8 +1942,8 @@ def _launch_tk_app(initial_paths: Sequence[str | Path] = ()) -> None:
         bd=0,
         highlightthickness=1,
         highlightbackground=GUI_THEME["border"],
-        highlightcolor=GUI_THEME["primary"],
-        bg=GUI_THEME["panel_alt"],
+        highlightcolor=GUI_THEME["focus"],
+        bg=GUI_THEME["panel_muted"],
         fg=GUI_THEME["muted"],
         activestyle="none",
     )
@@ -1601,8 +1959,11 @@ def _launch_tk_app(initial_paths: Sequence[str | Path] = ()) -> None:
 
     export_button = ttk.Button(footer, style="Primary.TButton")
     export_button.grid(row=0, column=0, sticky="w", padx=(0, 12))
-    status_label = ttk.Label(footer, textvariable=status_var, style="Subtitle.TLabel")
-    status_label.grid(row=0, column=1, sticky="w")
+    status_frame = ttk.Frame(footer, padding=(12, 8), style="Status.TFrame")
+    status_frame.grid(row=0, column=1, sticky="ew", padx=(0, 12))
+    status_frame.columnconfigure(0, weight=1)
+    status_label = ttk.Label(status_frame, textvariable=status_var, style="Status.TLabel")
+    status_label.grid(row=0, column=0, sticky="ew")
     open_button = ttk.Button(footer, state=tk.DISABLED)
     open_button.grid(row=0, column=2, sticky="e")
 
@@ -1637,7 +1998,7 @@ def _launch_tk_app(initial_paths: Sequence[str | Path] = ()) -> None:
                     return
                 tree.delete(*tree.get_children())
                 for row in result.phase_rows:
-                    tree.insert("", tk.END, values=row)
+                    tree.insert("", tk.END, values=row, tags=tree_tags_for_phase_row(row))
                 if result.failed_count:
                     status_var.set(
                         _gui_text(
@@ -1729,7 +2090,7 @@ def _launch_tk_app(initial_paths: Sequence[str | Path] = ()) -> None:
             def finish() -> None:
                 nonlocal last_output_path
                 for row in result.phase_rows:
-                    tree.insert("", tk.END, values=row)
+                    tree.insert("", tk.END, values=row, tags=tree_tags_for_phase_row(row))
                 last_output_path = result.output_path
                 set_busy(False)
                 open_button.configure(state=tk.NORMAL)
@@ -1775,6 +2136,9 @@ def _launch_tk_app(initial_paths: Sequence[str | Path] = ()) -> None:
         elastic_label.configure(text=_gui_text(lang(), "elastic_cubic_label"))
         elastic_matrix_label.configure(text=_gui_text(lang(), "elastic_matrix_label"))
         elastic_source_label.configure(text=_gui_text(lang(), "elastic_source_label"))
+        fill_cubic_button.configure(text=_gui_text(lang(), "fill_cubic_elastic"))
+        paste_elastic_button.configure(text=_gui_text(lang(), "paste_elastic"))
+        copy_elastic_button.configure(text=_gui_text(lang(), "copy_elastic"))
         apply_elastic_button.configure(text=_gui_text(lang(), "apply_elastic"))
         clear_elastic_button.configure(text=_gui_text(lang(), "clear_elastic"))
         add_files_button.configure(text=_gui_text(lang(), "add_files"))
@@ -1822,6 +2186,8 @@ def _launch_tk_app(initial_paths: Sequence[str | Path] = ()) -> None:
             status_var.set(_gui_text(lang(), "ready_to_add"))
         if refresh_preview:
             schedule_preview()
+        path = selected_display_path()
+        set_elastic_status_feedback(None if path is None else elastic_constants.get(path))
 
     def toggle_language() -> None:
         language_var.set("en" if lang() == "zh" else "zh")
@@ -1840,6 +2206,14 @@ def _launch_tk_app(initial_paths: Sequence[str | Path] = ()) -> None:
         (remove_button, "remove_selected"),
         (clear_button, "clear_files"),
         (display_name_entry, "display_name"),
+        (elastic_entry, "elastic_cubic"),
+        (fill_cubic_button, "fill_cubic_elastic"),
+        (elastic_grid_frame, "elastic_matrix"),
+        (elastic_source_entry, "elastic_source"),
+        (paste_elastic_button, "paste_elastic"),
+        (copy_elastic_button, "copy_elastic"),
+        (apply_elastic_button, "apply_elastic"),
+        (clear_elastic_button, "clear_elastic"),
         (output_entry, "output_file"),
         (choose_output_button, "choose_output"),
         (preset_box, "xray_preset"),

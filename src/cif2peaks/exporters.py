@@ -661,7 +661,8 @@ def _xlsx_styles_xml() -> str:
         for color in PHASE_FILL_COLORS
     )
     phase_xfs = "".join(
-        f'<xf numFmtId="0" fontId="0" fillId="{index}" borderId="0" xfId="0" applyFill="1"/>'
+        f'<xf numFmtId="0" fontId="0" fillId="{index}" borderId="0" xfId="0" applyFill="1" applyAlignment="1">'
+        '<alignment horizontal="center" vertical="center"/></xf>'
         for index in range(4, 4 + len(PHASE_FILL_COLORS))
     )
     cell_xfs_count = PHASE_STYLE_FIRST_ID + len(PHASE_FILL_COLORS)
@@ -669,8 +670,8 @@ def _xlsx_styles_xml() -> str:
         '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
         '<styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">'
         '<fonts count="2">'
-        '<font><sz val="11"/><color rgb="FF000000"/><name val="Calibri"/><family val="2"/></font>'
-        '<font><b/><sz val="11"/><color rgb="FFFFFFFF"/><name val="Calibri"/><family val="2"/></font>'
+        '<font><sz val="11"/><color rgb="FF000000"/><name val="Times New Roman"/><family val="1"/></font>'
+        '<font><b/><sz val="11"/><color rgb="FFFFFFFF"/><name val="Times New Roman"/><family val="1"/></font>'
         "</fonts>"
         f'<fills count="{4 + len(PHASE_FILL_COLORS)}">'
         '<fill><patternFill patternType="none"/></fill>'
@@ -681,9 +682,12 @@ def _xlsx_styles_xml() -> str:
         '<borders count="1"><border><left/><right/><top/><bottom/><diagonal/></border></borders>'
         '<cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>'
         f'<cellXfs count="{cell_xfs_count}">'
-        '<xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/>'
-        '<xf numFmtId="0" fontId="1" fillId="2" borderId="0" xfId="0" applyFont="1" applyFill="1"/>'
-        '<xf numFmtId="0" fontId="1" fillId="3" borderId="0" xfId="0" applyFont="1" applyFill="1"/>'
+        '<xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0" applyAlignment="1">'
+        '<alignment horizontal="center" vertical="center"/></xf>'
+        '<xf numFmtId="0" fontId="1" fillId="2" borderId="0" xfId="0" applyFont="1" applyFill="1" applyAlignment="1">'
+        '<alignment horizontal="center" vertical="center"/></xf>'
+        '<xf numFmtId="0" fontId="1" fillId="3" borderId="0" xfId="0" applyFont="1" applyFill="1" applyAlignment="1">'
+        '<alignment horizontal="center" vertical="center"/></xf>'
         f"{phase_xfs}</cellXfs>"
         '<cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles>'
         '<dxfs count="0"/>'
@@ -694,22 +698,22 @@ def _xlsx_styles_xml() -> str:
 
 def _table_column_widths(headers: list[Any]) -> list[int]:
     default_widths = {
-        "phase_name": 24,
-        "cif_name": 28,
-        "formula": 16,
-        "space_group": 16,
+        "phase_name": 22,
+        "cif_name": 30,
+        "formula": 14,
+        "space_group": 14,
         "space_group_from_cif": 20,
         "space_group_detected": 22,
         "hkl": 12,
         "d_A": 12,
-        "two_theta_current_deg": 20,
+        "two_theta_current_deg": 19,
         "two_theta_deg": 16,
-        "two_theta_cu_ka_deg": 20,
-        "x_axis_mode": 16,
-        "x": 14,
-        "relative_intensity": 18,
-        "multiplicity": 14,
-        "warnings": 42,
+        "two_theta_cu_ka_deg": 19,
+        "x_axis_mode": 15,
+        "x": 12,
+        "relative_intensity": 17,
+        "multiplicity": 12,
+        "warnings": 48,
         "family_label": 18,
         "i": 10,
         "g_1_over_A": 14,
@@ -717,7 +721,7 @@ def _table_column_widths(headers: list[Any]) -> list[int]:
         "theta_deg": 12,
         "young_modulus_hkl_normal_GPa": 26,
         "elastic_status": 22,
-        "elastic_warning": 42,
+        "elastic_warning": 48,
         "elastic_hkl_used": 16,
         "elastic_family_count": 18,
         "elastic_family_moduli_GPa": 48,
@@ -726,19 +730,22 @@ def _table_column_widths(headers: list[Any]) -> list[int]:
         "unit": 10,
         "source": 28,
         "coordinate_frame": 34,
-        "相名": 22,
-        "CIF 文件": 28,
-        "化学式": 16,
-        "空间群": 16,
+        "pattern_label": 22,
+        "source_file": 42,
+        "axis_mode": 14,
+        "相名": 18,
+        "CIF 文件": 30,
+        "化学式": 14,
+        "空间群": 14,
         "晶面 hkl": 12,
-        "d 间距 (Å)": 14,
-        "2θ 当前设置 (°)": 20,
-        "2θ Cu Kα (°)": 18,
-        "相对强度": 14,
-        "多重性": 12,
-        "提示": 42,
+        "d 间距 (Å)": 13,
+        "2θ 当前设置 (°)": 18,
+        "2θ Cu Kα (°)": 17,
+        "相对强度": 12,
+        "多重性": 10,
+        "提示": 48,
         "晶面法向杨氏模量 (GPa)": 24,
-        "弹性常数状态": 18,
+        "弹性常数状态": 16,
     }
     return [default_widths.get(str(header), max(10, min(24, len(str(header)) + 2))) for header in headers]
 
