@@ -85,6 +85,21 @@ class XRDPeakRecord:
     lp_factor: float
     multiplicity_structure_factor_sq: float
     material_scattering_factor_R_hkl: float
+    inverse_material_scattering_factor_1_over_R_hkl: float
+    phase_relative_R_hkl_pct: float
+    phase_peak_rank_by_R_hkl: int
+    phase_peak_rank_by_relative_intensity: int
+    coincident_hkl_family_count: int
+    is_multi_family_peak: bool
+    mean_structure_factor_sq_per_multiplicity: float
+    mean_structure_factor_abs_per_multiplicity: float
+    sin_theta: float
+    cos_theta: float
+    sin_theta_over_lambda_1_over_A: float
+    sin2_theta_over_lambda2_1_over_A2: float
+    phase_density_g_cm3: float
+    phase_formula_weight_g_mol: float
+    phase_cell_volume_A3: float
     r_hkl_model_note: str
     multiplicity: int
     label: str
@@ -191,6 +206,21 @@ class Cif2PeaksPeakRow:
     lp_factor: float
     multiplicity_structure_factor_sq: float
     material_scattering_factor_R_hkl: float
+    inverse_material_scattering_factor_1_over_R_hkl: float
+    phase_relative_R_hkl_pct: float
+    phase_peak_rank_by_R_hkl: int
+    phase_peak_rank_by_relative_intensity: int
+    coincident_hkl_family_count: int
+    is_multi_family_peak: bool
+    mean_structure_factor_sq_per_multiplicity: float
+    mean_structure_factor_abs_per_multiplicity: float
+    sin_theta: float
+    cos_theta: float
+    sin_theta_over_lambda_1_over_A: float
+    sin2_theta_over_lambda2_1_over_A2: float
+    phase_density_g_cm3: float
+    phase_formula_weight_g_mol: float
+    phase_cell_volume_A3: float
     r_hkl_model_note: str
     multiplicity: int
 

@@ -463,6 +463,82 @@ def test_combined_peak_rows_export_material_scattering_factor_r_hkl() -> None:
     assert "not a Rietveld residual" in first["r_hkl_model_note"]
 
 
+def test_combined_peak_rows_export_quant_phase_analysis_metrics() -> None:
+    service = Cif2PeaksService()
+    phase = service.load_phase(TI_BETA_CIF)
+    settings = Cif2PeaksSettings()
+    service.simulate_phase(phase, settings)
+
+    rows = combined_peak_rows([phase])
+    first = rows[0]
+    quant_headers = {
+        "inverse_material_scattering_factor_1_over_R_hkl",
+        "phase_relative_R_hkl_pct",
+        "phase_peak_rank_by_R_hkl",
+        "phase_peak_rank_by_relative_intensity",
+        "coincident_hkl_family_count",
+        "is_multi_family_peak",
+        "mean_structure_factor_sq_per_multiplicity",
+        "mean_structure_factor_abs_per_multiplicity",
+        "sin_theta",
+        "cos_theta",
+        "sin_theta_over_lambda_1_over_A",
+        "sin2_theta_over_lambda2_1_over_A2",
+        "phase_density_g_cm3",
+        "phase_formula_weight_g_mol",
+        "phase_cell_volume_A3",
+    }
+
+    assert quant_headers <= set(first)
+    max_r_hkl = max(row["material_scattering_factor_R_hkl"] for row in rows)
+    theta_rad = np.deg2rad(first["theta_deg"])
+    wavelength_A = phase.result.metadata["wavelength_A"]
+    ranked_by_r_hkl = sorted(rows, key=lambda row: row["material_scattering_factor_R_hkl"], reverse=True)
+    ranked_by_intensity = sorted(rows, key=lambda row: row["relative_intensity"], reverse=True)
+
+    assert np.isclose(
+        first["inverse_material_scattering_factor_1_over_R_hkl"],
+        1.0 / first["material_scattering_factor_R_hkl"],
+    )
+    assert np.isclose(
+        first["phase_relative_R_hkl_pct"],
+        100.0 * first["material_scattering_factor_R_hkl"] / max_r_hkl,
+    )
+    assert [row["phase_peak_rank_by_R_hkl"] for row in ranked_by_r_hkl] == list(range(1, len(rows) + 1))
+    assert [row["phase_peak_rank_by_relative_intensity"] for row in ranked_by_intensity] == list(range(1, len(rows) + 1))
+    assert first["coincident_hkl_family_count"] == len(first["family_hkls"])
+    assert first["is_multi_family_peak"] is False
+    assert np.isclose(
+        first["mean_structure_factor_sq_per_multiplicity"],
+        first["multiplicity_structure_factor_sq"] / first["multiplicity"],
+    )
+    assert np.isclose(
+        first["mean_structure_factor_abs_per_multiplicity"],
+        np.sqrt(first["mean_structure_factor_sq_per_multiplicity"]),
+    )
+    assert np.isclose(first["sin_theta"], np.sin(theta_rad))
+    assert np.isclose(first["cos_theta"], np.cos(theta_rad))
+    assert np.isclose(first["sin_theta_over_lambda_1_over_A"], np.sin(theta_rad) / wavelength_A)
+    assert np.isclose(first["sin2_theta_over_lambda2_1_over_A2"], (np.sin(theta_rad) / wavelength_A) ** 2)
+    assert np.isclose(first["phase_density_g_cm3"], phase.crystal.pymatgen_structure.density)
+    assert np.isclose(first["phase_formula_weight_g_mol"], phase.crystal.pymatgen_structure.composition.weight)
+    assert np.isclose(first["phase_cell_volume_A3"], first["cell_volume_A3"])
+
+
+def test_combined_peak_rows_flag_multi_family_quant_peaks() -> None:
+    service = Cif2PeaksService()
+    phase = service.load_phase(TI_BETA_CIF)
+    settings = Cif2PeaksSettings()
+    service.simulate_phase(phase, settings)
+    assert phase.result is not None
+    phase.result.peaks[0] = replace(phase.result.peaks[0], family_hkls=((1, 1, 0), (2, 0, 0)))
+
+    row = combined_peak_rows([phase])[0]
+
+    assert row["coincident_hkl_family_count"] == 2
+    assert row["is_multi_family_peak"] is True
+
+
 def test_r_hkl_columns_export_to_csv_json_excel_and_keep_pattern_scale(tmp_path: Path) -> None:
     service = Cif2PeaksService()
     phase = service.load_phase(TI_BETA_CIF)
@@ -501,6 +577,60 @@ def test_r_hkl_columns_export_to_csv_json_excel_and_keep_pattern_scale(tmp_path:
     assert "I_unscaled ≈ p_hkl |F_hkl|^2 LP" in guide_text
     assert "不是 Rietveld" in guide_text
     assert np.isclose(max(row["relative_intensity"] for row in pattern_rows), 100.0)
+
+
+def test_quant_phase_analysis_columns_export_without_experimental_templates(tmp_path: Path) -> None:
+    service = Cif2PeaksService()
+    phase = service.load_phase(TI_BETA_CIF)
+    settings = Cif2PeaksSettings(two_theta_min_deg=0.0, two_theta_max_deg=80.0, step_deg=0.2)
+    service.simulate_phase(phase, settings)
+    payload = Cif2PeaksExportPayload([phase], settings)
+
+    csv_output = tmp_path / "quant.csv"
+    export_peak_reference_csv(payload, csv_output)
+    with csv_output.open("r", encoding="utf-8-sig", newline="") as handle:
+        csv_row = next(csv.DictReader(handle))
+
+    json_output = tmp_path / "quant.json"
+    export_cif2peaks_json(payload, json_output)
+    json_row = json.loads(json_output.read_text(encoding="utf-8"))["phases"][0]["peaks"][0]
+
+    workbook_output = tmp_path / "quant.xlsx"
+    export_cif2peaks_workbook(payload, workbook_output)
+    combined_headers = _worksheet_rows_by_name(workbook_output, "Combined Peaks")[0]
+    beginner_headers = _worksheet_rows_by_name(workbook_output, "推荐峰表")[0]
+    guide_text = "\n".join("|".join(row) for row in _worksheet_rows_by_name(workbook_output, "使用说明"))
+    exported_header_text = "|".join([*csv_row.keys(), *json_row.keys(), *combined_headers, *beginner_headers])
+    quant_headers = {
+        "inverse_material_scattering_factor_1_over_R_hkl",
+        "phase_relative_R_hkl_pct",
+        "phase_peak_rank_by_R_hkl",
+        "phase_peak_rank_by_relative_intensity",
+        "coincident_hkl_family_count",
+        "is_multi_family_peak",
+        "mean_structure_factor_sq_per_multiplicity",
+        "mean_structure_factor_abs_per_multiplicity",
+        "sin_theta",
+        "cos_theta",
+        "sin_theta_over_lambda_1_over_A",
+        "sin2_theta_over_lambda2_1_over_A2",
+        "phase_density_g_cm3",
+        "phase_formula_weight_g_mol",
+        "phase_cell_volume_A3",
+    }
+
+    assert quant_headers <= set(csv_row)
+    assert quant_headers <= set(json_row)
+    assert quant_headers <= set(combined_headers)
+    assert "1/R_hkl" in beginner_headers
+    assert "相内 R_hkl (%)" in beginner_headers
+    assert "密度 (g/cm³)" in beginner_headers
+    assert "多族峰" in beginner_headers
+    assert "实验峰积分误差" in guide_text
+    assert "Rietveld 残差" in guide_text
+    assert "experimental_integrated_intensity" not in exported_header_text
+    assert "corrected_intensity" not in exported_header_text
+    assert "overlap" not in exported_header_text.lower()
 
 
 def test_hexagonal_hkl_labels_preserve_four_index_notation(tmp_path: Path) -> None:
@@ -1200,7 +1330,7 @@ def test_cif2peaks_workbook_peak_sheets_are_excel_friendly(tmp_path: Path) -> No
         combined = archive.read("xl/worksheets/sheet2.xml").decode("utf-8")
 
     assert '<pane ySplit="1" topLeftCell="A2"' in combined
-    assert '<autoFilter ref="A1:AH' in combined
+    assert '<autoFilter ref="A1:AW' in combined
     assert '<cols>' in combined
     combined_headers = _worksheet_rows(output, 2)[0]
     beginner_headers = _worksheet_rows(output, 3)[0]
@@ -1266,8 +1396,12 @@ def test_cif2peaks_workbook_includes_beginner_chinese_peak_table(tmp_path: Path)
         "多重性",
         "提示",
         "R因子 R_hkl",
+        "1/R_hkl",
+        "相内 R_hkl (%)",
         "未归一化理论强度",
         "晶胞体积 (Å^3)",
+        "密度 (g/cm³)",
+        "多族峰",
         "R因子说明",
         "晶面法向杨氏模量 (GPa)",
         "弹性常数状态",

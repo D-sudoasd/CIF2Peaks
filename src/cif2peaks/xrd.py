@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dataclasses import replace
 from pathlib import Path
 
 import numpy as np
@@ -41,6 +42,34 @@ def _lorentz_polarization_factor(theta_rad: float) -> float:
     if abs(float(denominator)) < 1e-12:
         return float("inf")
     return float((1.0 + np.cos(2.0 * theta_rad) ** 2) / denominator)
+
+
+def _finite_float_or_nan(value: object) -> float:
+    try:
+        resolved = float(value)  # type: ignore[arg-type]
+    except (TypeError, ValueError):
+        return float("nan")
+    return resolved if np.isfinite(resolved) else float("nan")
+
+
+def _inverse_or_nan(value: float) -> float:
+    return float("nan") if not np.isfinite(value) or value == 0 else float(1.0 / value)
+
+
+def _sqrt_or_nan(value: float) -> float:
+    return float("nan") if not np.isfinite(value) or value < 0 else float(np.sqrt(value))
+
+
+def _descending_ordinal_ranks(values: list[float]) -> list[int]:
+    indexed = sorted(
+        enumerate(values),
+        key=lambda item: item[1] if np.isfinite(item[1]) else float("-inf"),
+        reverse=True,
+    )
+    ranks = [0] * len(values)
+    for rank, (index, _value) in enumerate(indexed, start=1):
+        ranks[index] = rank
+    return ranks
 
 
 def build_quality_report(result: XRDResult) -> dict[str, object]:
@@ -128,6 +157,8 @@ class XRDService:
         d_hkls = np.asarray(pattern.d_hkls, dtype=float)
         max_intensity = float(np.max(pattern_y)) if pattern_y.size else 1.0
         cell_volume_A3 = float(crystal.pymatgen_structure.lattice.volume)
+        phase_density_g_cm3 = _finite_float_or_nan(crystal.pymatgen_structure.density)
+        phase_formula_weight_g_mol = _finite_float_or_nan(crystal.pymatgen_structure.composition.weight)
 
         for two_theta, intensity, families, d_spacing in zip(pattern_x, pattern_y, pattern.hkls, d_hkls, strict=True):
             if not families:
@@ -139,9 +170,13 @@ class XRDService:
             label = " / ".join(format_hkl(item["hkl"]) for item in families[:3])
             family_label = "{" + " / ".join(format_hkl(item["hkl"])[1:-1] for item in families[:6]) + "}"
             theta = float(two_theta) / 2.0
+            theta_rad = np.deg2rad(theta)
+            sin_theta = float(np.sin(theta_rad))
+            cos_theta = float(np.cos(theta_rad))
+            sin_theta_over_lambda = float("nan") if wavelength <= 0 else float(sin_theta / wavelength)
             g_invA = 0.0 if float(d_spacing) == 0 else 1.0 / float(d_spacing)
-            q_invA = 4.0 * np.pi * np.sin(np.deg2rad(theta)) / wavelength
-            lp_factor = _lorentz_polarization_factor(np.deg2rad(theta))
+            q_invA = 4.0 * np.pi * sin_theta / wavelength
+            lp_factor = _lorentz_polarization_factor(theta_rad)
             theoretical_intensity_unscaled = float(intensity)
             multiplicity_structure_factor_sq = (
                 float("nan")
@@ -152,6 +187,12 @@ class XRDService:
                 float("nan")
                 if cell_volume_A3 <= 0
                 else theoretical_intensity_unscaled / (cell_volume_A3**2)
+            )
+            coincident_hkl_family_count = len(family_hkls) or 1
+            mean_structure_factor_sq_per_multiplicity = (
+                float("nan")
+                if multiplicity <= 0 or not np.isfinite(multiplicity_structure_factor_sq)
+                else float(multiplicity_structure_factor_sq / multiplicity)
             )
             peaks.append(
                 XRDPeakRecord(
@@ -168,6 +209,23 @@ class XRDService:
                     lp_factor=lp_factor,
                     multiplicity_structure_factor_sq=float(multiplicity_structure_factor_sq),
                     material_scattering_factor_R_hkl=float(material_scattering_factor_R_hkl),
+                    inverse_material_scattering_factor_1_over_R_hkl=_inverse_or_nan(float(material_scattering_factor_R_hkl)),
+                    phase_relative_R_hkl_pct=float("nan"),
+                    phase_peak_rank_by_R_hkl=0,
+                    phase_peak_rank_by_relative_intensity=0,
+                    coincident_hkl_family_count=coincident_hkl_family_count,
+                    is_multi_family_peak=coincident_hkl_family_count > 1,
+                    mean_structure_factor_sq_per_multiplicity=mean_structure_factor_sq_per_multiplicity,
+                    mean_structure_factor_abs_per_multiplicity=_sqrt_or_nan(mean_structure_factor_sq_per_multiplicity),
+                    sin_theta=sin_theta,
+                    cos_theta=cos_theta,
+                    sin_theta_over_lambda_1_over_A=sin_theta_over_lambda,
+                    sin2_theta_over_lambda2_1_over_A2=float("nan")
+                    if not np.isfinite(sin_theta_over_lambda)
+                    else float(sin_theta_over_lambda**2),
+                    phase_density_g_cm3=phase_density_g_cm3,
+                    phase_formula_weight_g_mol=phase_formula_weight_g_mol,
+                    phase_cell_volume_A3=cell_volume_A3,
                     r_hkl_model_note=R_HKL_MODEL_NOTE,
                     multiplicity=multiplicity,
                     label=label,
@@ -179,6 +237,25 @@ class XRDService:
 
         if np.max(profile) > 0:
             profile = profile / np.max(profile) * 100.0
+
+        if peaks:
+            r_hkl_values = [peak.material_scattering_factor_R_hkl for peak in peaks]
+            intensity_values = [peak.normalized_intensity for peak in peaks]
+            finite_r_hkl_values = [value for value in r_hkl_values if np.isfinite(value)]
+            max_r_hkl = max(finite_r_hkl_values) if finite_r_hkl_values else float("nan")
+            r_hkl_ranks = _descending_ordinal_ranks(r_hkl_values)
+            intensity_ranks = _descending_ordinal_ranks(intensity_values)
+            peaks = [
+                replace(
+                    peak,
+                    phase_relative_R_hkl_pct=float("nan")
+                    if not np.isfinite(max_r_hkl) or max_r_hkl == 0 or not np.isfinite(peak.material_scattering_factor_R_hkl)
+                    else float(100.0 * peak.material_scattering_factor_R_hkl / max_r_hkl),
+                    phase_peak_rank_by_R_hkl=r_hkl_ranks[index],
+                    phase_peak_rank_by_relative_intensity=intensity_ranks[index],
+                )
+                for index, peak in enumerate(peaks)
+            ]
 
         warnings = list(crystal.validation_report.warnings)
         if crystal.has_partial_occupancy:
@@ -207,6 +284,8 @@ class XRDService:
                 "source_preset": resolved_request.source_preset,
                 "wavelength_A": wavelength,
                 "cell_volume_A3": cell_volume_A3,
+                "phase_density_g_cm3": phase_density_g_cm3,
+                "phase_formula_weight_g_mol": phase_formula_weight_g_mol,
                 "R_hkl_definition": "R_hkl = I_unscaled / V_cell^2",
                 "I_unscaled_definition": "I_unscaled = p_hkl|F_hkl|^2*LP from pymatgen scaled=False; Debye-Waller assumed 1.",
                 "q_definition": "4*pi*sin(theta)/lambda",

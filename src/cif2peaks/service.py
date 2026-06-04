@@ -96,6 +96,7 @@ def two_theta_for_wavelength(d_spacing_A: float, wavelength_A: float) -> float |
 
 def peak_to_cif2peaks_row(phase: XrdPhase, peak: XRDPeakRecord) -> Cif2PeaksPeakRow:
     h, k, i, ell = split_hkl_components(peak.hkl)
+    family_hkls = peak.family_hkls or (peak.hkl,)
     return Cif2PeaksPeakRow(
         phase_name=phase.phase_name,
         cif_name=phase.cif_path.name,
@@ -104,7 +105,7 @@ def peak_to_cif2peaks_row(phase: XrdPhase, peak: XRDPeakRecord) -> Cif2PeaksPeak
         i=i,
         l=ell,
         family_label=peak.family_label,
-        family_hkls=peak.family_hkls or (peak.hkl,),
+        family_hkls=family_hkls,
         d_A=peak.d_spacing_A,
         g_1_over_A=peak.g_invA,
         q_1_over_A=peak.q_invA,
@@ -117,6 +118,21 @@ def peak_to_cif2peaks_row(phase: XrdPhase, peak: XRDPeakRecord) -> Cif2PeaksPeak
         lp_factor=peak.lp_factor,
         multiplicity_structure_factor_sq=peak.multiplicity_structure_factor_sq,
         material_scattering_factor_R_hkl=peak.material_scattering_factor_R_hkl,
+        inverse_material_scattering_factor_1_over_R_hkl=peak.inverse_material_scattering_factor_1_over_R_hkl,
+        phase_relative_R_hkl_pct=peak.phase_relative_R_hkl_pct,
+        phase_peak_rank_by_R_hkl=peak.phase_peak_rank_by_R_hkl,
+        phase_peak_rank_by_relative_intensity=peak.phase_peak_rank_by_relative_intensity,
+        coincident_hkl_family_count=len(family_hkls),
+        is_multi_family_peak=len(family_hkls) > 1,
+        mean_structure_factor_sq_per_multiplicity=peak.mean_structure_factor_sq_per_multiplicity,
+        mean_structure_factor_abs_per_multiplicity=peak.mean_structure_factor_abs_per_multiplicity,
+        sin_theta=peak.sin_theta,
+        cos_theta=peak.cos_theta,
+        sin_theta_over_lambda_1_over_A=peak.sin_theta_over_lambda_1_over_A,
+        sin2_theta_over_lambda2_1_over_A2=peak.sin2_theta_over_lambda2_1_over_A2,
+        phase_density_g_cm3=peak.phase_density_g_cm3,
+        phase_formula_weight_g_mol=peak.phase_formula_weight_g_mol,
+        phase_cell_volume_A3=peak.phase_cell_volume_A3,
         r_hkl_model_note=peak.r_hkl_model_note,
         multiplicity=peak.multiplicity,
     )

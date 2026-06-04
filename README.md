@@ -108,6 +108,21 @@ The peak tables include:
 - `two_theta_current_deg`
 - `relative_intensity`
 - `material_scattering_factor_R_hkl`
+- `inverse_material_scattering_factor_1_over_R_hkl`
+- `phase_relative_R_hkl_pct`
+- `phase_peak_rank_by_R_hkl`
+- `phase_peak_rank_by_relative_intensity`
+- `coincident_hkl_family_count`
+- `is_multi_family_peak`
+- `mean_structure_factor_sq_per_multiplicity`
+- `mean_structure_factor_abs_per_multiplicity`
+- `sin_theta`
+- `cos_theta`
+- `sin_theta_over_lambda_1_over_A`
+- `sin2_theta_over_lambda2_1_over_A2`
+- `phase_density_g_cm3`
+- `phase_formula_weight_g_mol`
+- `phase_cell_volume_A3`
 - `theoretical_intensity_unscaled`
 - `cell_volume_A3`
 - `lp_factor`
@@ -153,6 +168,11 @@ values over the chosen peaks for each phase, then use the phase averages to
 estimate volume fractions, for example `f_B2 = S_B2 / (S_B2 + S_gamma)`.
 This `R_hkl` is not a Rietveld refinement residual such as `Rp`, `Rwp`, or
 `Rexp`.
+CIF2Peaks also repeats phase density, formula weight, and related Bragg
+variables in the peak table so users can filter and copy theoretical factors
+without joining additional sheets. These reference columns do not include
+absorption, preferred orientation, microabsorption, experimental instrument
+geometry, experimental peak-integration error, or Rietveld residual corrections.
 
 When Cij values are supplied, `young_modulus_hkl_normal_GPa` is calculated
 from the user-provided stiffness matrix and the CIF lattice-derived hkl plane

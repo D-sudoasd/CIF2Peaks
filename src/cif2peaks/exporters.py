@@ -17,6 +17,25 @@ from .service import phase_peak_rows
 from .utils import friendly_cif_issue_message, now_iso, package_versions
 
 
+QUANT_PHASE_ANALYSIS_HEADERS = [
+    "inverse_material_scattering_factor_1_over_R_hkl",
+    "phase_relative_R_hkl_pct",
+    "phase_peak_rank_by_R_hkl",
+    "phase_peak_rank_by_relative_intensity",
+    "coincident_hkl_family_count",
+    "is_multi_family_peak",
+    "mean_structure_factor_sq_per_multiplicity",
+    "mean_structure_factor_abs_per_multiplicity",
+    "sin_theta",
+    "cos_theta",
+    "sin_theta_over_lambda_1_over_A",
+    "sin2_theta_over_lambda2_1_over_A2",
+    "phase_density_g_cm3",
+    "phase_formula_weight_g_mol",
+    "phase_cell_volume_A3",
+]
+
+
 PEAK_HEADERS = [
     "phase_name",
     "cif_name",
@@ -27,6 +46,7 @@ PEAK_HEADERS = [
     "two_theta_current_deg",
     "relative_intensity",
     "material_scattering_factor_R_hkl",
+    *QUANT_PHASE_ANALYSIS_HEADERS,
     "theoretical_intensity_unscaled",
     "cell_volume_A3",
     "lp_factor",
@@ -66,6 +86,7 @@ PEAK_REFERENCE_HEADERS = [
     "two_theta_cu_ka_deg",
     "relative_intensity",
     "material_scattering_factor_R_hkl",
+    *QUANT_PHASE_ANALYSIS_HEADERS,
     "theoretical_intensity_unscaled",
     "cell_volume_A3",
     "lp_factor",
@@ -148,8 +169,12 @@ BEGINNER_PEAK_HEADERS = [
     "多重性",
     "提示",
     "R因子 R_hkl",
+    "1/R_hkl",
+    "相内 R_hkl (%)",
     "未归一化理论强度",
     "晶胞体积 (Å^3)",
+    "密度 (g/cm³)",
+    "多族峰",
     "R因子说明",
     "晶面法向杨氏模量 (GPa)",
     "弹性常数状态",
@@ -158,7 +183,7 @@ BEGINNER_PEAK_HEADERS = [
 HEADER_STYLE_ID = 1
 KEY_HEADER_STYLE_ID = 2
 PHASE_STYLE_FIRST_ID = 3
-BEGINNER_KEY_COLUMN_INDEXES = {1, 5, 6, 7, 8, 9, 11, 12}
+BEGINNER_KEY_COLUMN_INDEXES = {1, 5, 6, 7, 8, 9, 11, 12, 13, 14, 17, 18}
 PHASE_FILL_COLORS = [
     "FFF2CC",
     "DDEBF7",
@@ -176,12 +201,25 @@ def _to_jsonable(value: Any) -> Any:
         return str(value)
     if isinstance(value, np.ndarray):
         return value.tolist()
-    if isinstance(value, (np.floating, np.integer)):
+    if isinstance(value, (float, np.floating)):
+        resolved = float(value)
+        return resolved if np.isfinite(resolved) else None
+    if isinstance(value, np.integer):
         return value.item()
     if isinstance(value, dict):
         return {str(key): _to_jsonable(item) for key, item in value.items()}
     if isinstance(value, (list, tuple)):
         return [_to_jsonable(item) for item in value]
+    return value
+
+
+def _export_table_value(value: Any) -> Any:
+    if value is None:
+        return ""
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, (int, float, np.integer, np.floating)) and not np.isfinite(float(value)):
+        return ""
     return value
 
 
@@ -341,6 +379,21 @@ def peak_reference_rows(phases: list[XrdPhase]) -> list[dict[str, Any]]:
                     "two_theta_cu_ka_deg": row.two_theta_cu_ka_deg,
                     "relative_intensity": row.relative_intensity,
                     "material_scattering_factor_R_hkl": row.material_scattering_factor_R_hkl,
+                    "inverse_material_scattering_factor_1_over_R_hkl": row.inverse_material_scattering_factor_1_over_R_hkl,
+                    "phase_relative_R_hkl_pct": row.phase_relative_R_hkl_pct,
+                    "phase_peak_rank_by_R_hkl": row.phase_peak_rank_by_R_hkl,
+                    "phase_peak_rank_by_relative_intensity": row.phase_peak_rank_by_relative_intensity,
+                    "coincident_hkl_family_count": row.coincident_hkl_family_count,
+                    "is_multi_family_peak": row.is_multi_family_peak,
+                    "mean_structure_factor_sq_per_multiplicity": row.mean_structure_factor_sq_per_multiplicity,
+                    "mean_structure_factor_abs_per_multiplicity": row.mean_structure_factor_abs_per_multiplicity,
+                    "sin_theta": row.sin_theta,
+                    "cos_theta": row.cos_theta,
+                    "sin_theta_over_lambda_1_over_A": row.sin_theta_over_lambda_1_over_A,
+                    "sin2_theta_over_lambda2_1_over_A2": row.sin2_theta_over_lambda2_1_over_A2,
+                    "phase_density_g_cm3": row.phase_density_g_cm3,
+                    "phase_formula_weight_g_mol": row.phase_formula_weight_g_mol,
+                    "phase_cell_volume_A3": row.phase_cell_volume_A3,
                     "theoretical_intensity_unscaled": row.theoretical_intensity_unscaled,
                     "cell_volume_A3": row.cell_volume_A3,
                     "lp_factor": row.lp_factor,
@@ -361,7 +414,10 @@ def export_peak_reference_csv(payload: Cif2PeaksExportPayload, output_path: str 
     with path.open("w", encoding="utf-8-sig", newline="") as handle:
         writer = csv.DictWriter(handle, fieldnames=PEAK_REFERENCE_HEADERS)
         writer.writeheader()
-        writer.writerows(peak_reference_rows(payload.phases))
+        writer.writerows(
+            {header: _export_table_value(row.get(header, "")) for header in PEAK_REFERENCE_HEADERS}
+            for row in peak_reference_rows(payload.phases)
+        )
 
 
 def _phase_wavelength_A(phase: XrdPhase, fallback: float) -> float:
@@ -579,6 +635,9 @@ def _user_guide_rows(payload: Cif2PeaksExportPayload) -> list[list[Any]]:
         ["2θ Cu Kα / two_theta_cu_ka_deg", "固定换算到 Cu Kα 条件下的 2θ，便于和常见实验数据或文献表格快速比较。"],
         ["相对强度 / relative_intensity", "理论归一化强度，最强峰为 100；可辅助找强峰，但不是实验定量强度。"],
         ["R因子 R_hkl / material_scattering_factor_R_hkl", "用于 direct comparison method 的每峰理论散射因子，R_hkl = I_unscaled / V_cell^2。"],
+        ["1/R_hkl / inverse_material_scattering_factor_1_over_R_hkl", "R_hkl 的倒数，便于用户在表格中自行做 I_exp/R_hkl 校正。"],
+        ["相内 R_hkl (%) / phase_relative_R_hkl_pct", "同一相内按最大 R_hkl 归一化到 100，用于快速筛选理论散射能力较强的峰。"],
+        ["多族峰 / is_multi_family_peak", "TRUE 表示该 2θ 峰含多个 hkl family；用于定量时应谨慎检查峰归属。"],
         ["未归一化理论强度 / theoretical_intensity_unscaled", "来自 pymatgen scaled=False 的粉末理论强度，近似 I_unscaled ≈ p_hkl |F_hkl|^2 LP；Debye-Waller 默认为 1。"],
         ["R因子说明 / r_hkl_model_note", "R_hkl 不是 Rietveld 残差；默认未包含实验吸收、探测器几何、同步辐射偏振修正。"],
         ["晶面法向杨氏模量 / young_modulus_hkl_normal_GPa", "仅当该相提供 Cij 时计算，表示 hkl 晶面法向方向的各向异性 Young's modulus，单位 GPa。"],
@@ -588,6 +647,7 @@ def _user_guide_rows(payload: Cif2PeaksExportPayload) -> list[list[Any]]:
         ["提示 / warnings", "CIF 读取或计算提示；非空时先检查 CIF 信息、占位、对称性或计算限制。"],
         [],
         ["如何和实验谱对齐", "先确认实验 X 射线波长是否与导出设置一致；一致时主要对比 2θ 当前设置，不一致时先用 d 间距或重新导出对应波长。"],
+        ["定量相分析限制", "理论参考列不包含吸收、择优取向、显微吸收、实验仪器几何、实验峰积分误差或 Rietveld 残差修正。"],
         ["常见误区", "不要只凭单个强峰判定物相；应同时比较多个峰位、hkl 和相邻相的重叠峰。相对强度受择优取向、晶粒尺寸、仪器函数等影响较大。"],
         [],
         ["常用列名", "含义"],
@@ -602,6 +662,21 @@ def _user_guide_rows(payload: Cif2PeaksExportPayload) -> list[list[Any]]:
         ["two_theta_cu_ka_deg", "Cu Kα 条件下的 2θ 位置，单位 °。"],
         ["relative_intensity", "归一化相对强度，最强峰为 100。"],
         ["material_scattering_factor_R_hkl", "每峰 material scattering factor，按 R_hkl = I_unscaled / V_cell^2 计算，用于体积分数 direct comparison method。"],
+        ["inverse_material_scattering_factor_1_over_R_hkl", "R_hkl 倒数，便于在外部表格中自行校正实验积分强度。"],
+        ["phase_relative_R_hkl_pct", "同一相内 R_hkl 相对最大值的百分比。"],
+        ["phase_peak_rank_by_R_hkl", "同一相内按 R_hkl 从大到小的 1-based 排名。"],
+        ["phase_peak_rank_by_relative_intensity", "同一相内按 relative_intensity 从大到小的 1-based 排名。"],
+        ["coincident_hkl_family_count", "同一 2θ 峰中合并的 hkl family 数量。"],
+        ["is_multi_family_peak", "是否为多 hkl family 合并峰。"],
+        ["mean_structure_factor_sq_per_multiplicity", "multiplicity_structure_factor_sq 除以 multiplicity 得到的平均项。"],
+        ["mean_structure_factor_abs_per_multiplicity", "mean_structure_factor_sq_per_multiplicity 的平方根。"],
+        ["sin_theta", "Bragg 角 theta 的正弦。"],
+        ["cos_theta", "Bragg 角 theta 的余弦。"],
+        ["sin_theta_over_lambda_1_over_A", "sin(theta)/lambda，单位 1/Å。"],
+        ["sin2_theta_over_lambda2_1_over_A2", "(sin(theta)/lambda)^2，单位 1/Å^2。"],
+        ["phase_density_g_cm3", "该相结构密度，单位 g/cm³。"],
+        ["phase_formula_weight_g_mol", "该相组成式量，单位 g/mol。"],
+        ["phase_cell_volume_A3", "该相晶胞体积，单位 Å^3；在峰表中重复提供便于筛选复制。"],
         ["theoretical_intensity_unscaled", "未归一化理论强度，近似 p_hkl |F_hkl|^2 LP；Debye-Waller 默认为 1。"],
         ["cell_volume_A3", "该 CIF/Pymatgen 结构的晶胞体积，单位 Å^3。"],
         ["lp_factor", "Lorentz-polarization 修正因子。"],
@@ -678,9 +753,13 @@ def _xlsx_style_attribute(style_id: int | None) -> str:
 
 
 def _xlsx_cell(ref: str, value: Any, style_id: int | None = None) -> str:
+    value = _export_table_value(value)
     style = _xlsx_style_attribute(style_id)
     if value is None:
         return f'<c r="{ref}"{style} t="inlineStr"><is><t></t></is></c>'
+    if isinstance(value, bool):
+        text = "TRUE" if value else "FALSE"
+        return f'<c r="{ref}"{style} t="inlineStr"><is><t>{text}</t></is></c>'
     if isinstance(value, (int, float, np.integer, np.floating)) and np.isfinite(float(value)):
         return f'<c r="{ref}"{style}><v>{float(value):.12g}</v></c>'
     text = html.escape(str(value))
@@ -747,6 +826,21 @@ def _table_column_widths(headers: list[Any]) -> list[int]:
         "x": 12,
         "relative_intensity": 17,
         "material_scattering_factor_R_hkl": 32,
+        "inverse_material_scattering_factor_1_over_R_hkl": 38,
+        "phase_relative_R_hkl_pct": 24,
+        "phase_peak_rank_by_R_hkl": 24,
+        "phase_peak_rank_by_relative_intensity": 32,
+        "coincident_hkl_family_count": 26,
+        "is_multi_family_peak": 18,
+        "mean_structure_factor_sq_per_multiplicity": 38,
+        "mean_structure_factor_abs_per_multiplicity": 40,
+        "sin_theta": 14,
+        "cos_theta": 14,
+        "sin_theta_over_lambda_1_over_A": 28,
+        "sin2_theta_over_lambda2_1_over_A2": 34,
+        "phase_density_g_cm3": 22,
+        "phase_formula_weight_g_mol": 28,
+        "phase_cell_volume_A3": 22,
         "theoretical_intensity_unscaled": 30,
         "cell_volume_A3": 18,
         "lp_factor": 16,
@@ -785,8 +879,12 @@ def _table_column_widths(headers: list[Any]) -> list[int]:
         "多重性": 10,
         "提示": 48,
         "R因子 R_hkl": 20,
+        "1/R_hkl": 18,
+        "相内 R_hkl (%)": 18,
         "未归一化理论强度": 22,
         "晶胞体积 (Å^3)": 18,
+        "密度 (g/cm³)": 16,
+        "多族峰": 10,
         "R因子说明": 64,
         "晶面法向杨氏模量 (GPa)": 24,
         "弹性常数状态": 16,
@@ -897,11 +995,11 @@ def _safe_sheet_name(name: str, used: set[str]) -> str:
 
 
 def _peak_rows_for_sheet(rows: list[dict[str, Any]]) -> list[list[Any]]:
-    return [PEAK_HEADERS, *[[row.get(header, "") for header in PEAK_HEADERS] for row in rows]]
+    return [PEAK_HEADERS, *[[_export_table_value(row.get(header, "")) for header in PEAK_HEADERS] for row in rows]]
 
 
 def _pattern_rows_for_sheet(rows: list[dict[str, Any]]) -> list[list[Any]]:
-    return [PATTERN_PROFILE_HEADERS, *[[row.get(header, "") for header in PATTERN_PROFILE_HEADERS] for row in rows]]
+    return [PATTERN_PROFILE_HEADERS, *[[_export_table_value(row.get(header, "")) for header in PATTERN_PROFILE_HEADERS] for row in rows]]
 
 
 def _beginner_peak_rows_for_sheet(rows: list[dict[str, Any]]) -> list[list[Any]]:
@@ -909,23 +1007,30 @@ def _beginner_peak_rows_for_sheet(rows: list[dict[str, Any]]) -> list[list[Any]]
         BEGINNER_PEAK_HEADERS,
         *[
             [
-                row.get("phase_name", ""),
-                row.get("cif_name", ""),
-                row.get("formula", ""),
-                row.get("space_group", ""),
-                row.get("hkl", ""),
-                row.get("d_A", ""),
-                row.get("two_theta_current_deg", ""),
-                row.get("two_theta_cu_ka_deg", ""),
-                row.get("relative_intensity", ""),
-                row.get("multiplicity", ""),
-                row.get("warnings", ""),
-                row.get("material_scattering_factor_R_hkl", ""),
-                row.get("theoretical_intensity_unscaled", ""),
-                row.get("cell_volume_A3", ""),
-                row.get("r_hkl_model_note", ""),
-                row.get("young_modulus_hkl_normal_GPa", ""),
-                row.get("elastic_status", ""),
+                _export_table_value(value)
+                for value in [
+                    row.get("phase_name", ""),
+                    row.get("cif_name", ""),
+                    row.get("formula", ""),
+                    row.get("space_group", ""),
+                    row.get("hkl", ""),
+                    row.get("d_A", ""),
+                    row.get("two_theta_current_deg", ""),
+                    row.get("two_theta_cu_ka_deg", ""),
+                    row.get("relative_intensity", ""),
+                    row.get("multiplicity", ""),
+                    row.get("warnings", ""),
+                    row.get("material_scattering_factor_R_hkl", ""),
+                    row.get("inverse_material_scattering_factor_1_over_R_hkl", ""),
+                    row.get("phase_relative_R_hkl_pct", ""),
+                    row.get("theoretical_intensity_unscaled", ""),
+                    row.get("cell_volume_A3", ""),
+                    row.get("phase_density_g_cm3", ""),
+                    row.get("is_multi_family_peak", ""),
+                    row.get("r_hkl_model_note", ""),
+                    row.get("young_modulus_hkl_normal_GPa", ""),
+                    row.get("elastic_status", ""),
+                ]
             ]
             for row in rows
         ],
