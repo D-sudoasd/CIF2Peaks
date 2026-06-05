@@ -1521,6 +1521,26 @@ def test_cif2peaks_combined_peak_sheets_color_rows_by_phase(tmp_path: Path) -> N
     assert combined_styles[second_phase_row][0] != combined_styles[1][0]
 
 
+def test_cif2peaks_beginner_key_headers_follow_inserted_r_hkl_no_lp_columns(tmp_path: Path) -> None:
+    service = Cif2PeaksService()
+    phases = [service.load_phase(TI_BETA_CIF), service.load_phase(TI_NB_HCP_CIF)]
+    settings = Cif2PeaksSettings()
+    service.simulate_phases(phases, settings)
+    output = tmp_path / "beginner_key_headers.xlsx"
+
+    export_cif2peaks_workbook(Cif2PeaksExportPayload(phases, settings), output)
+
+    headers = _worksheet_rows(output, 3)[0]
+    header_styles = dict(zip(headers, _worksheet_cell_styles(output, 3)[0], strict=True))
+
+    assert header_styles["R因子 R_hkl_no_LP"] == "2"
+    assert header_styles["1/R_hkl_no_LP"] == "2"
+    assert header_styles["相内 R_hkl_no_LP (%)"] == "2"
+    assert header_styles["密度 (g/cm³)"] == "2"
+    assert header_styles["多族峰"] == "2"
+    assert header_styles["R因子说明"] == "1"
+
+
 def test_cif2peaks_user_guide_explains_beginner_columns_and_limits(tmp_path: Path) -> None:
     service = Cif2PeaksService()
     phases = [service.load_phase(TI_BETA_CIF), service.load_phase(TI_NB_HCP_CIF)]
