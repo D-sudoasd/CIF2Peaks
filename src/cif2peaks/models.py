@@ -85,9 +85,13 @@ class XRDPeakRecord:
     lp_factor: float
     multiplicity_structure_factor_sq: float
     material_scattering_factor_R_hkl: float
+    material_scattering_factor_R_hkl_no_lp: float
     inverse_material_scattering_factor_1_over_R_hkl: float
+    inverse_material_scattering_factor_1_over_R_hkl_no_lp: float
     phase_relative_R_hkl_pct: float
+    phase_relative_R_hkl_no_lp_pct: float
     phase_peak_rank_by_R_hkl: int
+    phase_peak_rank_by_R_hkl_no_lp: int
     phase_peak_rank_by_relative_intensity: int
     coincident_hkl_family_count: int
     is_multi_family_peak: bool
@@ -206,9 +210,13 @@ class Cif2PeaksPeakRow:
     lp_factor: float
     multiplicity_structure_factor_sq: float
     material_scattering_factor_R_hkl: float
+    material_scattering_factor_R_hkl_no_lp: float
     inverse_material_scattering_factor_1_over_R_hkl: float
+    inverse_material_scattering_factor_1_over_R_hkl_no_lp: float
     phase_relative_R_hkl_pct: float
+    phase_relative_R_hkl_no_lp_pct: float
     phase_peak_rank_by_R_hkl: int
+    phase_peak_rank_by_R_hkl_no_lp: int
     phase_peak_rank_by_relative_intensity: int
     coincident_hkl_family_count: int
     is_multi_family_peak: bool

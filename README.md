@@ -108,9 +108,13 @@ The peak tables include:
 - `two_theta_current_deg`
 - `relative_intensity`
 - `material_scattering_factor_R_hkl`
+- `material_scattering_factor_R_hkl_no_lp`
 - `inverse_material_scattering_factor_1_over_R_hkl`
+- `inverse_material_scattering_factor_1_over_R_hkl_no_lp`
 - `phase_relative_R_hkl_pct`
+- `phase_relative_R_hkl_no_lp_pct`
 - `phase_peak_rank_by_R_hkl`
+- `phase_peak_rank_by_R_hkl_no_lp`
 - `phase_peak_rank_by_relative_intensity`
 - `coincident_hkl_family_count`
 - `is_multi_family_peak`
@@ -151,7 +155,8 @@ For direct comparison phase-fraction workflows, CIF2Peaks also exports a
 per-peak material scattering factor:
 
 ```text
-R_hkl = I_unscaled / V_cell^2
+R_hkl_with_LP = I_unscaled / V_cell^2
+R_hkl_no_LP = (I_unscaled / LP) / V_cell^2
 I_unscaled ≈ p_hkl |F_hkl|^2 LP
 ```
 
@@ -162,12 +167,20 @@ temperature-factor data are supplied, CIF2Peaks assumes `e^-2M = 1`.
 Experimental absorption, detector geometry, and synchrotron polarization
 corrections are not included.
 
+Use `material_scattering_factor_R_hkl` for uncorrected experimental peak
+areas, or when you need the same with-LP convention as pymatgen's theoretical
+powder pattern. Use `material_scattering_factor_R_hkl_no_lp` for pyFAI or an
+equivalent workflow where the integrated peak area has already been corrected
+for LP/polarization/geometry terms. If the experimental reduction record does
+not prove whether LP was removed, do not use either column for phase-fraction
+quantification until the pyFAI configuration and integration log are checked.
+
 In Excel, an experimental integrated peak intensity `I_exp,j` can be corrected
-as `I_exp,j / material_scattering_factor_R_hkl,j`. Average those corrected
-values over the chosen peaks for each phase, then use the phase averages to
-estimate volume fractions, for example `f_B2 = S_B2 / (S_B2 + S_gamma)`.
-This `R_hkl` is not a Rietveld refinement residual such as `Rp`, `Rwp`, or
-`Rexp`.
+as `I_exp,j / R_j`, using the R column that matches the experimental correction
+state. Average those corrected values over the chosen peaks for each phase,
+then use the phase averages to estimate volume fractions, for example
+`f_B2 = S_B2 / (S_B2 + S_gamma)`. These `R_hkl` columns are not Rietveld
+refinement residuals such as `Rp`, `Rwp`, or `Rexp`.
 CIF2Peaks also repeats phase density, formula weight, and related Bragg
 variables in the peak table so users can filter and copy theoretical factors
 without joining additional sheets. These reference columns do not include

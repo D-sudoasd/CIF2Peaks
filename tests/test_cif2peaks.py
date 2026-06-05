@@ -439,6 +439,8 @@ def test_combined_peak_rows_export_material_scattering_factor_r_hkl() -> None:
     first = rows[0]
     r_hkl_headers = {
         "material_scattering_factor_R_hkl",
+        "material_scattering_factor_R_hkl_no_lp",
+        "inverse_material_scattering_factor_1_over_R_hkl_no_lp",
         "theoretical_intensity_unscaled",
         "cell_volume_A3",
         "lp_factor",
@@ -459,8 +461,22 @@ def test_combined_peak_rows_export_material_scattering_factor_r_hkl() -> None:
         first["multiplicity_structure_factor_sq"],
         first["theoretical_intensity_unscaled"] / first["lp_factor"],
     )
+    assert np.isclose(
+        first["material_scattering_factor_R_hkl_no_lp"],
+        first["multiplicity_structure_factor_sq"] / first["cell_volume_A3"] ** 2,
+    )
+    assert np.isclose(
+        first["inverse_material_scattering_factor_1_over_R_hkl_no_lp"],
+        1.0 / first["material_scattering_factor_R_hkl_no_lp"],
+    )
+    assert np.isclose(
+        first["material_scattering_factor_R_hkl"] / first["material_scattering_factor_R_hkl_no_lp"],
+        first["lp_factor"],
+    )
     assert "Debye-Waller" in first["r_hkl_model_note"]
     assert "not a Rietveld residual" in first["r_hkl_model_note"]
+    assert "with LP" in first["r_hkl_model_note"]
+    assert "no-LP" in first["r_hkl_model_note"]
 
 
 def test_combined_peak_rows_export_quant_phase_analysis_metrics() -> None:
@@ -475,6 +491,8 @@ def test_combined_peak_rows_export_quant_phase_analysis_metrics() -> None:
         "inverse_material_scattering_factor_1_over_R_hkl",
         "phase_relative_R_hkl_pct",
         "phase_peak_rank_by_R_hkl",
+        "phase_relative_R_hkl_no_lp_pct",
+        "phase_peak_rank_by_R_hkl_no_lp",
         "phase_peak_rank_by_relative_intensity",
         "coincident_hkl_family_count",
         "is_multi_family_peak",
@@ -491,9 +509,11 @@ def test_combined_peak_rows_export_quant_phase_analysis_metrics() -> None:
 
     assert quant_headers <= set(first)
     max_r_hkl = max(row["material_scattering_factor_R_hkl"] for row in rows)
+    max_r_hkl_no_lp = max(row["material_scattering_factor_R_hkl_no_lp"] for row in rows)
     theta_rad = np.deg2rad(first["theta_deg"])
     wavelength_A = phase.result.metadata["wavelength_A"]
     ranked_by_r_hkl = sorted(rows, key=lambda row: row["material_scattering_factor_R_hkl"], reverse=True)
+    ranked_by_r_hkl_no_lp = sorted(rows, key=lambda row: row["material_scattering_factor_R_hkl_no_lp"], reverse=True)
     ranked_by_intensity = sorted(rows, key=lambda row: row["relative_intensity"], reverse=True)
 
     assert np.isclose(
@@ -504,7 +524,12 @@ def test_combined_peak_rows_export_quant_phase_analysis_metrics() -> None:
         first["phase_relative_R_hkl_pct"],
         100.0 * first["material_scattering_factor_R_hkl"] / max_r_hkl,
     )
+    assert np.isclose(
+        first["phase_relative_R_hkl_no_lp_pct"],
+        100.0 * first["material_scattering_factor_R_hkl_no_lp"] / max_r_hkl_no_lp,
+    )
     assert [row["phase_peak_rank_by_R_hkl"] for row in ranked_by_r_hkl] == list(range(1, len(rows) + 1))
+    assert [row["phase_peak_rank_by_R_hkl_no_lp"] for row in ranked_by_r_hkl_no_lp] == list(range(1, len(rows) + 1))
     assert [row["phase_peak_rank_by_relative_intensity"] for row in ranked_by_intensity] == list(range(1, len(rows) + 1))
     assert first["coincident_hkl_family_count"] == len(first["family_hkls"])
     assert first["is_multi_family_peak"] is False
@@ -565,16 +590,29 @@ def test_r_hkl_columns_export_to_csv_json_excel_and_keep_pattern_scale(tmp_path:
 
     assert "material_scattering_factor_R_hkl" in csv_row
     assert float(csv_row["material_scattering_factor_R_hkl"]) > 0
+    assert "material_scattering_factor_R_hkl_no_lp" in csv_row
+    assert float(csv_row["material_scattering_factor_R_hkl_no_lp"]) > 0
     assert "material_scattering_factor_R_hkl" in json_row
     assert json_row["material_scattering_factor_R_hkl"] > 0
+    assert "material_scattering_factor_R_hkl_no_lp" in json_row
+    assert json_row["material_scattering_factor_R_hkl_no_lp"] > 0
     assert "material_scattering_factor_R_hkl" in combined_headers
+    assert "material_scattering_factor_R_hkl_no_lp" in combined_headers
     assert "theoretical_intensity_unscaled" in combined_headers
     assert "R因子 R_hkl" in beginner_headers
+    assert "R因子 R_hkl_no_LP" in beginner_headers
+    assert "1/R_hkl_no_LP" in beginner_headers
     assert "未归一化理论强度" in beginner_headers
     assert "晶胞体积 (Å^3)" in beginner_headers
     assert "R因子说明" in beginner_headers
     assert ["R_hkl_definition", "R_hkl = I_unscaled / V_cell^2"] in summary_rows
+    assert ["R_hkl_with_LP_definition", "R_hkl_with_LP = I_unscaled / V_cell^2"] in summary_rows
+    assert ["R_hkl_no_LP_definition", "R_hkl_no_LP = (I_unscaled / LP) / V_cell^2"] in summary_rows
     assert "I_unscaled ≈ p_hkl |F_hkl|^2 LP" in guide_text
+    assert "含 LP" in guide_text
+    assert "去 LP" in guide_text
+    assert "pyFAI" in guide_text
+    assert "已校正积分强度推荐 no-LP" in guide_text
     assert "不是 Rietveld" in guide_text
     assert np.isclose(max(row["relative_intensity"] for row in pattern_rows), 100.0)
 
@@ -603,8 +641,11 @@ def test_quant_phase_analysis_columns_export_without_experimental_templates(tmp_
     exported_header_text = "|".join([*csv_row.keys(), *json_row.keys(), *combined_headers, *beginner_headers])
     quant_headers = {
         "inverse_material_scattering_factor_1_over_R_hkl",
+        "inverse_material_scattering_factor_1_over_R_hkl_no_lp",
         "phase_relative_R_hkl_pct",
         "phase_peak_rank_by_R_hkl",
+        "phase_relative_R_hkl_no_lp_pct",
+        "phase_peak_rank_by_R_hkl_no_lp",
         "phase_peak_rank_by_relative_intensity",
         "coincident_hkl_family_count",
         "is_multi_family_peak",
@@ -623,7 +664,9 @@ def test_quant_phase_analysis_columns_export_without_experimental_templates(tmp_
     assert quant_headers <= set(json_row)
     assert quant_headers <= set(combined_headers)
     assert "1/R_hkl" in beginner_headers
+    assert "1/R_hkl_no_LP" in beginner_headers
     assert "相内 R_hkl (%)" in beginner_headers
+    assert "相内 R_hkl_no_LP (%)" in beginner_headers
     assert "密度 (g/cm³)" in beginner_headers
     assert "多族峰" in beginner_headers
     assert "实验峰积分误差" in guide_text
@@ -1330,7 +1373,7 @@ def test_cif2peaks_workbook_peak_sheets_are_excel_friendly(tmp_path: Path) -> No
         combined = archive.read("xl/worksheets/sheet2.xml").decode("utf-8")
 
     assert '<pane ySplit="1" topLeftCell="A2"' in combined
-    assert '<autoFilter ref="A1:AW' in combined
+    assert '<autoFilter ref="A1:BA' in combined
     assert '<cols>' in combined
     combined_headers = _worksheet_rows(output, 2)[0]
     beginner_headers = _worksheet_rows(output, 3)[0]
@@ -1398,6 +1441,9 @@ def test_cif2peaks_workbook_includes_beginner_chinese_peak_table(tmp_path: Path)
         "R因子 R_hkl",
         "1/R_hkl",
         "相内 R_hkl (%)",
+        "R因子 R_hkl_no_LP",
+        "1/R_hkl_no_LP",
+        "相内 R_hkl_no_LP (%)",
         "未归一化理论强度",
         "晶胞体积 (Å^3)",
         "密度 (g/cm³)",

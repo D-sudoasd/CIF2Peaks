@@ -13,9 +13,12 @@ from .utils import now_iso, package_versions
 
 
 R_HKL_MODEL_NOTE = (
-    "R_hkl = I_unscaled / V_cell^2; I_unscaled from pymatgen unscaled powder intensity "
-    "p_hkl|F_hkl|^2*LP; Debye-Waller assumed 1; no experimental absorption, detector geometry, "
-    "or synchrotron polarization correction; not a Rietveld residual."
+    "R_hkl_with_LP = I_unscaled/V_cell^2 uses pymatgen unscaled powder intensity "
+    "p_hkl|F_hkl|^2*LP; use with LP for uncorrected integrated peak areas or pymatgen-style "
+    "pattern comparison. R_hkl_no_LP = (I_unscaled/LP)/V_cell^2; use no-LP for pyFAI or "
+    "equivalent LP/polarization/geometry corrected integrated peak areas. Debye-Waller assumed "
+    "1; no experimental absorption, preferred orientation, or Rietveld residual correction; "
+    "not a Rietveld residual."
 )
 
 
@@ -188,6 +191,11 @@ class XRDService:
                 if cell_volume_A3 <= 0
                 else theoretical_intensity_unscaled / (cell_volume_A3**2)
             )
+            material_scattering_factor_R_hkl_no_lp = (
+                float("nan")
+                if cell_volume_A3 <= 0 or not np.isfinite(multiplicity_structure_factor_sq)
+                else float(multiplicity_structure_factor_sq / (cell_volume_A3**2))
+            )
             coincident_hkl_family_count = len(family_hkls) or 1
             mean_structure_factor_sq_per_multiplicity = (
                 float("nan")
@@ -209,9 +217,15 @@ class XRDService:
                     lp_factor=lp_factor,
                     multiplicity_structure_factor_sq=float(multiplicity_structure_factor_sq),
                     material_scattering_factor_R_hkl=float(material_scattering_factor_R_hkl),
+                    material_scattering_factor_R_hkl_no_lp=float(material_scattering_factor_R_hkl_no_lp),
                     inverse_material_scattering_factor_1_over_R_hkl=_inverse_or_nan(float(material_scattering_factor_R_hkl)),
+                    inverse_material_scattering_factor_1_over_R_hkl_no_lp=_inverse_or_nan(
+                        float(material_scattering_factor_R_hkl_no_lp)
+                    ),
                     phase_relative_R_hkl_pct=float("nan"),
+                    phase_relative_R_hkl_no_lp_pct=float("nan"),
                     phase_peak_rank_by_R_hkl=0,
+                    phase_peak_rank_by_R_hkl_no_lp=0,
                     phase_peak_rank_by_relative_intensity=0,
                     coincident_hkl_family_count=coincident_hkl_family_count,
                     is_multi_family_peak=coincident_hkl_family_count > 1,
@@ -240,10 +254,14 @@ class XRDService:
 
         if peaks:
             r_hkl_values = [peak.material_scattering_factor_R_hkl for peak in peaks]
+            r_hkl_no_lp_values = [peak.material_scattering_factor_R_hkl_no_lp for peak in peaks]
             intensity_values = [peak.normalized_intensity for peak in peaks]
             finite_r_hkl_values = [value for value in r_hkl_values if np.isfinite(value)]
+            finite_r_hkl_no_lp_values = [value for value in r_hkl_no_lp_values if np.isfinite(value)]
             max_r_hkl = max(finite_r_hkl_values) if finite_r_hkl_values else float("nan")
+            max_r_hkl_no_lp = max(finite_r_hkl_no_lp_values) if finite_r_hkl_no_lp_values else float("nan")
             r_hkl_ranks = _descending_ordinal_ranks(r_hkl_values)
+            r_hkl_no_lp_ranks = _descending_ordinal_ranks(r_hkl_no_lp_values)
             intensity_ranks = _descending_ordinal_ranks(intensity_values)
             peaks = [
                 replace(
@@ -251,7 +269,13 @@ class XRDService:
                     phase_relative_R_hkl_pct=float("nan")
                     if not np.isfinite(max_r_hkl) or max_r_hkl == 0 or not np.isfinite(peak.material_scattering_factor_R_hkl)
                     else float(100.0 * peak.material_scattering_factor_R_hkl / max_r_hkl),
+                    phase_relative_R_hkl_no_lp_pct=float("nan")
+                    if not np.isfinite(max_r_hkl_no_lp)
+                    or max_r_hkl_no_lp == 0
+                    or not np.isfinite(peak.material_scattering_factor_R_hkl_no_lp)
+                    else float(100.0 * peak.material_scattering_factor_R_hkl_no_lp / max_r_hkl_no_lp),
                     phase_peak_rank_by_R_hkl=r_hkl_ranks[index],
+                    phase_peak_rank_by_R_hkl_no_lp=r_hkl_no_lp_ranks[index],
                     phase_peak_rank_by_relative_intensity=intensity_ranks[index],
                 )
                 for index, peak in enumerate(peaks)
@@ -287,7 +311,10 @@ class XRDService:
                 "phase_density_g_cm3": phase_density_g_cm3,
                 "phase_formula_weight_g_mol": phase_formula_weight_g_mol,
                 "R_hkl_definition": "R_hkl = I_unscaled / V_cell^2",
+                "R_hkl_with_LP_definition": "R_hkl_with_LP = I_unscaled / V_cell^2",
+                "R_hkl_no_LP_definition": "R_hkl_no_LP = (I_unscaled / LP) / V_cell^2",
                 "I_unscaled_definition": "I_unscaled = p_hkl|F_hkl|^2*LP from pymatgen scaled=False; Debye-Waller assumed 1.",
+                "R_hkl_usage": "Use with-LP R for uncorrected peak areas; use no-LP R for pyFAI or equivalent corrected integrated intensities.",
                 "q_definition": "4*pi*sin(theta)/lambda",
                 "two_theta_range_deg": [resolved_request.two_theta_min_deg, resolved_request.two_theta_max_deg],
                 "step_deg": resolved_request.step_deg,
