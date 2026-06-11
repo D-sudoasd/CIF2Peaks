@@ -41,7 +41,7 @@ def export_output_paths(
     export_patterns: bool,
 ) -> tuple[Path | None, Path | None]:
     output = Path(output_path).expanduser().resolve()
-    if export_patterns and output.suffix == "":
+    if output.suffix == "":
         output = output.with_suffix(".xlsx")
     if export_peaks and export_patterns:
         return output.with_name(f"{output.stem}_峰表{output.suffix}"), output.with_name(f"{output.stem}_谱线.xlsx")
