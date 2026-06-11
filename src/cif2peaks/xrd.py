@@ -97,6 +97,29 @@ class XRDService:
     def _build_result_cache_key(crystal: CrystalModel, request: XRDRequest) -> tuple[object, ...]:
         return (crystal.cif_hash, *request.cache_key())
 
+    @staticmethod
+    def _finite_setting(value: object, field_name: str) -> float:
+        try:
+            resolved = float(value)  # type: ignore[arg-type]
+        except (TypeError, ValueError) as exc:
+            raise ValueError(f"XRD {field_name} 必须为有限数字。") from exc
+        if not np.isfinite(resolved):
+            raise ValueError(f"XRD {field_name} 必须为有限数字。")
+        return resolved
+
+    def _validate_scan_request(self, request: XRDRequest) -> tuple[float, float, float, float]:
+        two_theta_min = self._finite_setting(request.two_theta_min_deg, "2θ 最小值")
+        two_theta_max = self._finite_setting(request.two_theta_max_deg, "2θ 最大值")
+        step_deg = self._finite_setting(request.step_deg, "步长")
+        fwhm_deg = self._finite_setting(request.fwhm_deg, "FWHM")
+        if two_theta_min < 0.0 or two_theta_max > 180.0 or two_theta_min >= two_theta_max:
+            raise ValueError("XRD 2θ 范围必须满足 0 <= min < max <= 180。")
+        if step_deg <= 0.0:
+            raise ValueError("XRD 步长必须为正数，单位 deg。")
+        if fwhm_deg <= 0.0:
+            raise ValueError("XRD FWHM 必须为正数，单位 deg。")
+        return two_theta_min, two_theta_max, step_deg, fwhm_deg
+
     def resolve_wavelength(self, request: XRDRequest) -> tuple[float, float | None, str]:
         input_mode = request.input_mode or "source"
         if input_mode == "energy":
@@ -120,18 +143,19 @@ class XRDService:
         return wavelength, X_RAY_ENERGY_WAVELENGTH_KEV_A / wavelength, f"source_preset:{request.source_preset}"
 
     def simulate(self, crystal: CrystalModel, request: XRDRequest) -> XRDResult:
+        two_theta_min, two_theta_max, step_deg, fwhm_deg = self._validate_scan_request(request)
         wavelength, energy_keV, wavelength_source = self.resolve_wavelength(request)
         resolved_request = XRDRequest(
             cif_path=Path(request.cif_path).expanduser().resolve(),
-            two_theta_min_deg=request.two_theta_min_deg,
-            two_theta_max_deg=request.two_theta_max_deg,
-            step_deg=request.step_deg,
+            two_theta_min_deg=two_theta_min,
+            two_theta_max_deg=two_theta_max,
+            step_deg=step_deg,
             input_mode=request.input_mode or "source",
             source_preset=request.source_preset,
             wavelength_A=wavelength,
             energy_keV=energy_keV if request.input_mode != "wavelength" else request.energy_keV,
             profile_model=request.profile_model,
-            fwhm_deg=request.fwhm_deg,
+            fwhm_deg=fwhm_deg,
             show_hkl_labels=request.show_hkl_labels,
             show_sticks=request.show_sticks,
         )

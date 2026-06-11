@@ -15,7 +15,7 @@ from zipfile import ZipFile
 import numpy as np
 import pytest
 
-from cif2peaks.batch import batch_export_peak_reference
+from cif2peaks.batch import batch_export_peak_reference, export_output_paths
 from cif2peaks.exporters import (
     combined_peak_rows,
     export_peak_reference_csv,
@@ -427,6 +427,22 @@ def test_cif2peaks_single_cif_peak_table_and_energy_shift() -> None:
     assert high_energy_phase.result is not None
     assert high_energy_phase.result.peaks[0].two_theta_deg < phase.result.peaks[0].two_theta_deg
     assert np.isclose(high_energy_phase.result.peaks[0].d_spacing_A, phase.result.peaks[0].d_spacing_A)
+
+
+def test_xrd_settings_reject_invalid_range_and_step() -> None:
+    service = Cif2PeaksService()
+
+    with pytest.raises(ValueError, match="2θ"):
+        service.simulate_phase(
+            service.load_phase(TI_BETA_CIF),
+            Cif2PeaksSettings(two_theta_min_deg=20.0, two_theta_max_deg=10.0),
+        )
+
+    with pytest.raises(ValueError, match="步长"):
+        service.simulate_phase(
+            service.load_phase(TI_BETA_CIF),
+            Cif2PeaksSettings(step_deg=0.0),
+        )
 
 
 def test_combined_peak_rows_export_material_scattering_factor_r_hkl() -> None:
@@ -1607,6 +1623,13 @@ def test_batch_cli_default_output_is_excel(tmp_path: Path) -> None:
     assert result.returncode == 0, result.stderr
     assert (tmp_path / "cif2peaks_peak_reference.xlsx").exists()
     assert not (tmp_path / "cif2peaks_peak_reference.csv").exists()
+
+
+def test_batch_output_path_without_suffix_defaults_to_excel(tmp_path: Path) -> None:
+    peak_output, pattern_output = export_output_paths(tmp_path / "reference", export_peaks=True, export_patterns=False)
+
+    assert peak_output == tmp_path / "reference.xlsx"
+    assert pattern_output is None
 
 
 def test_simple_gui_builds_energy_settings_from_user_inputs() -> None:
