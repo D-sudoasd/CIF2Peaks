@@ -429,6 +429,23 @@ def test_cif2peaks_single_cif_peak_table_and_energy_shift() -> None:
     assert np.isclose(high_energy_phase.result.peaks[0].d_spacing_A, phase.result.peaks[0].d_spacing_A)
 
 
+def test_cif2peaks_rejects_invalid_scan_range() -> None:
+    service = Cif2PeaksService()
+    phase = service.load_phase(TI_BETA_CIF)
+
+    with pytest.raises(ValueError, match="2theta range"):
+        service.simulate_phase(phase, Cif2PeaksSettings(two_theta_min_deg=80.0, two_theta_max_deg=20.0))
+
+
+@pytest.mark.parametrize("step_deg", [0.0, -0.1, float("nan")])
+def test_cif2peaks_rejects_invalid_scan_step(step_deg: float) -> None:
+    service = Cif2PeaksService()
+    phase = service.load_phase(TI_BETA_CIF)
+
+    with pytest.raises(ValueError, match="step_deg"):
+        service.simulate_phase(phase, Cif2PeaksSettings(step_deg=step_deg))
+
+
 def test_combined_peak_rows_export_material_scattering_factor_r_hkl() -> None:
     service = Cif2PeaksService()
     phase = service.load_phase(TI_BETA_CIF)

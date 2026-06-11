@@ -119,13 +119,27 @@ class XRDService:
         wavelength = float(value)
         return wavelength, X_RAY_ENERGY_WAVELENGTH_KEV_A / wavelength, f"source_preset:{request.source_preset}"
 
+    @staticmethod
+    def _validate_scan_window(request: XRDRequest) -> tuple[float, float, float]:
+        two_theta_min = _finite_float_or_nan(request.two_theta_min_deg)
+        two_theta_max = _finite_float_or_nan(request.two_theta_max_deg)
+        step_deg = _finite_float_or_nan(request.step_deg)
+        if not np.isfinite(two_theta_min) or not np.isfinite(two_theta_max):
+            raise ValueError("2theta range values must be finite numbers.")
+        if two_theta_min < 0 or two_theta_max > 180 or two_theta_min >= two_theta_max:
+            raise ValueError("2theta range must satisfy 0 <= min < max <= 180.")
+        if not np.isfinite(step_deg) or step_deg <= 0:
+            raise ValueError("step_deg must be a finite positive number.")
+        return two_theta_min, two_theta_max, step_deg
+
     def simulate(self, crystal: CrystalModel, request: XRDRequest) -> XRDResult:
         wavelength, energy_keV, wavelength_source = self.resolve_wavelength(request)
+        two_theta_min, two_theta_max, step_deg = self._validate_scan_window(request)
         resolved_request = XRDRequest(
             cif_path=Path(request.cif_path).expanduser().resolve(),
-            two_theta_min_deg=request.two_theta_min_deg,
-            two_theta_max_deg=request.two_theta_max_deg,
-            step_deg=request.step_deg,
+            two_theta_min_deg=two_theta_min,
+            two_theta_max_deg=two_theta_max,
+            step_deg=step_deg,
             input_mode=request.input_mode or "source",
             source_preset=request.source_preset,
             wavelength_A=wavelength,
