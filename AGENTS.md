@@ -516,6 +516,55 @@ If such a change is required, the change entry must include:
 
 ## Recent Change Log for Agents
 
+### 2026-06-13 — Tighten GUI Export Option States
+
+- **Agent / Author**: Codex
+- **Branch / Commit**: `main` / not committed at time of entry
+- **Files Changed**: `src/cif2peaks/gui.py`, `tests/test_cif2peaks.py`,
+  `AGENTS.md`
+- **Change Type**:
+  - [x] Bug fix
+  - [ ] Refactor
+  - [x] GUI change
+  - [ ] Data processing change
+  - [ ] Export / reporting change
+  - [ ] Dependency / config change
+  - [ ] Documentation only
+- **What Changed**: Shortened two English settings labels that clipped at the
+  minimum window width, added GUI export-state logic, disabled the pattern-axis
+  selector unless pattern export is enabled, disabled the figure preset selector
+  unless publication figures are enabled, and disabled export when no output
+  type is selected.
+- **Why It Changed**: GUI review from a materials-research workflow found that
+  English users could lose key text at the minimum window size and that inactive
+  advanced output controls looked editable, increasing the chance of
+  misunderstanding which settings affect the export.
+- **Impact Scope**: GUI layout and control-state behavior only. Core XRD
+  calculations, CIF parsing, export schemas, CLI options, and quick-export
+  defaults are unchanged.
+- **Risk Level**: Low
+- **Compatibility Notes**: Existing output flags still map to the same export
+  functions. Old workflows that export peak tables by default are unchanged.
+  No persistent GUI configuration format exists in this repository, so no saved
+  config migration was needed.
+- **Validation Performed**: Added failing GUI regression tests first, then
+  passed them after the change. Ran `.\.venv\Scripts\python.exe -m compileall
+  -q src tests scripts`, `.\.venv\Scripts\python.exe -m pytest
+  tests\test_cif2peaks.py -k "gui" -q`, `.\.venv\Scripts\python.exe -m
+  pytest -q`, GUI smoke startup with `CIF2PEAKS_SMOKE_TEST=1`, Tk layout
+  measurements for Chinese and English at `1200x760` and `1040x680`, Tk
+  control-state measurement for the dependent comboboxes, and CLI/quick-export
+  smoke exports from `examples/cif`. The local `py -3.11` launcher was not
+  available, so validation used the project `.venv` Python 3.13 runtime.
+- **Known Limitations**: Automated Tk measurements do not replace manual
+  high-DPI and multi-monitor visual review. Advanced Cij inputs remain visible
+  in the main workflow and may deserve a future collapsible expert section.
+- **Rollback Notes**: Revert the `gui_export_control_states` helper, related
+  Tk state refresh calls, and the English label shortening if the previous
+  always-enabled controls are preferred.
+- **Follow-up Needed**: Consider a separate UX pass for an explicit Advanced /
+  Expert section and, if requested, a real save/load settings workflow.
+
 ### 2026-06-13 — Add Preview Table Horizontal Scrollbar
 
 - **Agent / Author**: Codex

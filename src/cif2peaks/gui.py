@@ -197,6 +197,7 @@ GUI_TEXT = {
         "angstrom": " Å",
         "exporting": "正在计算 XRD 峰表并写入 Excel，请稍候...",
         "export_failed_status": "导出失败。",
+        "select_export_type": "请至少选择一种导出内容：峰位表或 XRD 谱线。",
         "export_failed_title": "导出失败",
         "export_done_title": "导出完成",
         "export_cancelled_overwrite": "已取消导出：目标文件已存在。",
@@ -283,9 +284,9 @@ GUI_TEXT = {
         "xray_preset": "X-ray preset",
         "manual_energy": "Manual energy keV",
         "d_range": "d range",
-        "publication_export": "Also export publication figures (SVG/PDF/EPS/PNG/TIFF)",
+        "publication_export": "Export figures (SVG/PDF/EPS/PNG/TIFF)",
         "figure_preset": "Figure preset",
-        "settings_hint": "Manual energy takes priority when filled; leave it blank to use the preset.",
+        "settings_hint": "Manual energy overrides preset; blank uses preset.",
         "preview_panel": "3. CIF preview / export result",
         "activity_log_title": "Activity log",
         "tree_display_name": "Display name",
@@ -325,6 +326,7 @@ GUI_TEXT = {
         "angstrom": " Å",
         "exporting": "Calculating XRD peaks and writing Excel. Please wait...",
         "export_failed_status": "Export failed.",
+        "select_export_type": "Select at least one output: peak table or XRD pattern data.",
         "export_failed_title": "Export failed",
         "export_done_title": "Export complete",
         "export_cancelled_overwrite": "Export cancelled: target file already exists.",
@@ -429,6 +431,22 @@ def should_overwrite_gui_outputs(output_paths: Sequence[str | Path | None], conf
         if path.exists() and not confirm(path):
             return False
     return True
+
+
+def gui_export_control_states(
+    *,
+    has_files: bool,
+    export_peaks: bool,
+    export_patterns: bool,
+    export_publication_figures: bool,
+    is_busy: bool = False,
+) -> dict[str, str]:
+    has_output = export_peaks or export_patterns
+    return {
+        "export_button": "normal" if has_files and has_output and not is_busy else "disabled",
+        "pattern_axis": "readonly" if export_patterns else "disabled",
+        "figure_preset": "readonly" if export_publication_figures else "disabled",
+    }
 
 
 def _resolved_display_name_lookup(display_names: Mapping[str | Path, str] | None) -> dict[Path, str]:
@@ -1304,6 +1322,7 @@ def _launch_tk_app(initial_paths: Sequence[str | Path] = ()) -> None:
     last_output_path: Path | None = None
     preview_generation = 0
     output_path_user_customized = False
+    export_is_busy = False
     language_var = tk.StringVar(value="zh")
     display_name_var = tk.StringVar(value="")
     elastic_cubic_var = tk.StringVar(value="")
@@ -1567,8 +1586,8 @@ def _launch_tk_app(initial_paths: Sequence[str | Path] = ()) -> None:
         count = len(selected_paths)
         input_summary_var.set(_gui_text(lang(), "no_cif") if count == 0 else _gui_text(lang(), "cif_count", count=count))
         output_var.set(str(next_gui_output_path(output_var.get(), selected_paths, output_path_user_customized)))
-        export_button.configure(state=tk.NORMAL if selected_paths else tk.DISABLED)
         status_var.set(_gui_text(lang(), "ready_to_export") if selected_paths else _gui_text(lang(), "ready_to_add"))
+        refresh_export_control_states(update_status=True)
         sync_display_name_entry()
         set_file_action_states()
         schedule_preview()
@@ -1895,6 +1914,9 @@ def _launch_tk_app(initial_paths: Sequence[str | Path] = ()) -> None:
     energy_var.trace_add("write", lambda *_: update_settings_summary())
     min_var.trace_add("write", lambda *_: update_settings_summary())
     max_var.trace_add("write", lambda *_: update_settings_summary())
+    export_peaks_var.trace_add("write", lambda *_: refresh_export_control_states(update_status=True))
+    export_patterns_var.trace_add("write", lambda *_: refresh_export_control_states(update_status=True))
+    publication_svg_var.trace_add("write", lambda *_: refresh_export_control_states(update_status=True))
 
     preview_panel = ttk.Frame(main, padding=16, style="Card.TFrame")
     preview_panel.grid(row=1, column=1, sticky="nsew", pady=(14, 0))
@@ -1969,8 +1991,26 @@ def _launch_tk_app(initial_paths: Sequence[str | Path] = ()) -> None:
     open_button = ttk.Button(footer, state=tk.DISABLED)
     open_button.grid(row=0, column=2, sticky="e")
 
+    def refresh_export_control_states(*, update_status: bool = False) -> None:
+        states = gui_export_control_states(
+            has_files=bool(selected_paths),
+            export_peaks=export_peaks_var.get(),
+            export_patterns=export_patterns_var.get(),
+            export_publication_figures=publication_svg_var.get(),
+            is_busy=export_is_busy,
+        )
+        export_button.configure(state=states["export_button"])
+        pattern_axis_box.configure(state=states["pattern_axis"])
+        pattern_axis_label.configure(state=states["pattern_axis"])
+        figure_preset_box.configure(state=states["figure_preset"])
+        figure_preset_label.configure(state=states["figure_preset"])
+        if update_status and selected_paths and not (export_peaks_var.get() or export_patterns_var.get()):
+            status_var.set(_gui_text(lang(), "select_export_type"))
+
     def set_busy(is_busy: bool) -> None:
-        export_button.configure(state=tk.DISABLED if is_busy or not selected_paths else tk.NORMAL)
+        nonlocal export_is_busy
+        export_is_busy = is_busy
+        refresh_export_control_states()
 
     def schedule_preview() -> None:
         nonlocal preview_generation
@@ -2028,6 +2068,9 @@ def _launch_tk_app(initial_paths: Sequence[str | Path] = ()) -> None:
 
     def export_now() -> None:
         nonlocal last_output_path
+        if not (export_peaks_var.get() or export_patterns_var.get()):
+            status_var.set(_gui_text(lang(), "select_export_type"))
+            return
         try:
             peak_output, pattern_output = export_output_paths(
                 normalize_xlsx_output_path(output_var.get()),
@@ -2186,6 +2229,7 @@ def _launch_tk_app(initial_paths: Sequence[str | Path] = ()) -> None:
             status_var.set(_gui_text(lang(), "ready_to_export"))
         else:
             status_var.set(_gui_text(lang(), "ready_to_add"))
+        refresh_export_control_states(update_status=True)
         if refresh_preview:
             schedule_preview()
         path = selected_display_path()
@@ -2200,7 +2244,7 @@ def _launch_tk_app(initial_paths: Sequence[str | Path] = ()) -> None:
 
     language_button.configure(command=toggle_language)
     export_button.configure(command=export_now)
-    export_button.configure(state=tk.NORMAL if selected_paths else tk.DISABLED)
+    refresh_export_control_states(update_status=True)
     open_button.configure(command=open_output_folder)
     for widget, role in (
         (add_files_button, "add_files"),

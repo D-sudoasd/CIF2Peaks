@@ -1969,7 +1969,45 @@ def test_gui_language_pack_covers_primary_controls() -> None:
     assert GUI_TEXT["en"]["choose_output"] == "Choose output"
     assert GUI_TEXT["en"]["apply_display_name"] == "Apply phase name"
     assert GUI_TEXT["en"]["activity_log_title"] == "Activity log"
+    assert GUI_TEXT["en"]["publication_export"] == "Export figures (SVG/PDF/EPS/PNG/TIFF)"
+    assert GUI_TEXT["en"]["settings_hint"] == "Manual energy overrides preset; blank uses preset."
     assert "figure options" in GUI_TEXT["en"]["ready_to_export"]
+
+
+def test_gui_export_control_states_follow_selected_outputs() -> None:
+    from cif2peaks.gui import gui_export_control_states
+
+    assert gui_export_control_states(
+        has_files=True,
+        export_peaks=True,
+        export_patterns=False,
+        export_publication_figures=False,
+    ) == {
+        "export_button": "normal",
+        "pattern_axis": "disabled",
+        "figure_preset": "disabled",
+    }
+    assert gui_export_control_states(
+        has_files=True,
+        export_peaks=False,
+        export_patterns=False,
+        export_publication_figures=True,
+    ) == {
+        "export_button": "disabled",
+        "pattern_axis": "disabled",
+        "figure_preset": "readonly",
+    }
+    assert gui_export_control_states(
+        has_files=True,
+        export_peaks=False,
+        export_patterns=True,
+        export_publication_figures=True,
+        is_busy=True,
+    ) == {
+        "export_button": "disabled",
+        "pattern_axis": "readonly",
+        "figure_preset": "readonly",
+    }
 
 
 def test_gui_activity_log_language_pack_covers_user_feedback_events() -> None:
