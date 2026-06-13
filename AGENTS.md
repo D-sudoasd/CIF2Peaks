@@ -516,6 +516,46 @@ If such a change is required, the change entry must include:
 
 ## Recent Change Log for Agents
 
+### 2026-06-13 — Add Preview Table Horizontal Scrollbar
+
+- **Agent / Author**: Codex
+- **Branch / Commit**: `main` / not committed at time of entry
+- **Files Changed**: `src/cif2peaks/gui.py`, `AGENTS.md`
+- **Change Type**:
+  - [x] Bug fix
+  - [ ] Refactor
+  - [x] GUI change
+  - [ ] Data processing change
+  - [ ] Export / reporting change
+  - [ ] Dependency / config change
+  - [ ] Documentation only
+- **What Changed**: Added a horizontal scrollbar to the GUI preview
+  `Treeview` and moved the activity log rows down to keep the preview table,
+  activity log, and scrollbars from overlapping.
+- **Why It Changed**: Pre-release GUI layout measurement showed that the
+  preview table columns can be wider than the default right-side preview area,
+  especially after language switching, so trailing columns were only reachable
+  by resizing the whole window.
+- **Impact Scope**: GUI preview layout only. Export schemas, sheet names,
+  scientific formulas, CLI behavior, and data-processing paths are unchanged.
+- **Risk Level**: Low
+- **Compatibility Notes**: Existing preview column names and widths are
+  preserved; the new scrollbar only improves access to clipped columns.
+- **Validation Performed**: Ran `.\.venv\Scripts\python.exe -m compileall -q
+  src tests scripts`, `.\.venv\Scripts\python.exe -m pytest -q`, GUI smoke
+  startup with `CIF2PEAKS_SMOKE_TEST=1`, CLI/quick-export smoke exports from
+  `examples/cif`, Tk layout measurement for Chinese and English UI states, and
+  `.\.venv\Scripts\python.exe -m pip check` after installing the declared local
+  drag-and-drop dependency.
+- **Known Limitations**: Manual inspection was limited to the current Windows
+  desktop environment and automated Tk layout metrics; high-DPI and every
+  external monitor scale still require human visual confirmation before a
+  public Windows release.
+- **Rollback Notes**: Revert the `Treeview` horizontal scrollbar addition and
+  restore the activity log grid rows if the extra scrollbar is not desired.
+- **Follow-up Needed**: Consider broader GUI visual regression coverage if
+  future layout changes add more long controls or additional preview columns.
+
 ### 2026-06-13 — Add Agent Maintenance Guide
 
 - **Agent / Author**: Codex

@@ -1900,7 +1900,7 @@ def _launch_tk_app(initial_paths: Sequence[str | Path] = ()) -> None:
     preview_panel.grid(row=1, column=1, sticky="nsew", pady=(14, 0))
     preview_panel.columnconfigure(0, weight=1)
     preview_panel.rowconfigure(1, weight=1)
-    preview_panel.rowconfigure(3, weight=0)
+    preview_panel.rowconfigure(4, weight=0)
 
     preview_panel_header, preview_panel_title = make_section_header(preview_panel, "PreviewAccent.TFrame")
     preview_panel_header.grid(row=0, column=0, columnspan=2, sticky="ew", pady=(0, 10))
@@ -1920,7 +1920,9 @@ def _launch_tk_app(initial_paths: Sequence[str | Path] = ()) -> None:
     tree.grid(row=1, column=0, sticky="nsew")
     tree_scroll = ttk.Scrollbar(preview_panel, orient="vertical", command=tree.yview)
     tree_scroll.grid(row=1, column=1, sticky="ns")
-    tree.configure(yscrollcommand=tree_scroll.set)
+    tree_x_scroll = ttk.Scrollbar(preview_panel, orient="horizontal", command=tree.xview)
+    tree_x_scroll.grid(row=2, column=0, sticky="ew")
+    tree.configure(yscrollcommand=tree_scroll.set, xscrollcommand=tree_x_scroll.set)
     tree.tag_configure("ok", foreground=GUI_THEME["text"])
     tree.tag_configure("warning", foreground=GUI_THEME["warning"])
     tree.tag_configure("failed", foreground=GUI_THEME["danger"])
@@ -1935,7 +1937,7 @@ def _launch_tk_app(initial_paths: Sequence[str | Path] = ()) -> None:
         return ("ok",)
 
     activity_log_label = ttk.Label(preview_panel, style="Card.TLabel")
-    activity_log_label.grid(row=2, column=0, sticky="w", pady=(10, 4))
+    activity_log_label.grid(row=3, column=0, sticky="w", pady=(10, 4))
     activity_listbox = tk.Listbox(
         preview_panel,
         height=5,
@@ -1947,9 +1949,9 @@ def _launch_tk_app(initial_paths: Sequence[str | Path] = ()) -> None:
         fg=GUI_THEME["muted"],
         activestyle="none",
     )
-    activity_listbox.grid(row=3, column=0, sticky="ew")
+    activity_listbox.grid(row=4, column=0, sticky="ew")
     activity_scroll = ttk.Scrollbar(preview_panel, orient="vertical", command=activity_listbox.yview)
-    activity_scroll.grid(row=3, column=1, sticky="ns")
+    activity_scroll.grid(row=4, column=1, sticky="ns")
     activity_listbox.configure(yscrollcommand=activity_scroll.set)
     append_activity(_gui_text(lang(), "log_ready"))
 
