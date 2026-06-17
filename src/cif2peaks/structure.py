@@ -151,11 +151,16 @@ def _is_occupancy_parse_failure(exc: Exception, warning_messages: list[str]) -> 
     return "occupancy" in text or "occupancies" in text
 
 
-def _load_pymatgen_structure(path: Path) -> tuple[PymatgenStructure, list[str]]:
+def _load_pymatgen_structure(path: Path, block: gemmi.cif.Block) -> tuple[PymatgenStructure, list[str]]:
+    block_text = block.as_string()
     try:
         with warnings.catch_warnings(record=True) as caught:
             warnings.simplefilter("always")
-            return PymatgenStructure.from_file(str(path)), []
+            parser = CifParser.from_str(block_text)
+            structures = parser.parse_structures(primitive=False)
+        if not structures:
+            raise ValueError(f"CIF 文件未解析出有效结构：{path}")
+        return structures[0], []
     except Exception as exc:
         strict_warnings = [str(item.message) for item in caught]
         if not _is_occupancy_parse_failure(exc, strict_warnings):
@@ -163,7 +168,7 @@ def _load_pymatgen_structure(path: Path) -> tuple[PymatgenStructure, list[str]]:
 
     with warnings.catch_warnings(record=True):
         warnings.simplefilter("ignore")
-        parser = CifParser(str(path), occupancy_tolerance=4.0)
+        parser = CifParser.from_str(block_text, occupancy_tolerance=4.0)
         structures = parser.parse_structures(primitive=False)
     if not structures:
         raise ValueError(f"CIF 文件未解析出有效结构：{path}")
@@ -177,7 +182,7 @@ def load_crystal_model(cif_path: str | Path) -> CrystalModel:
 
     document = gemmi.cif.read_file(str(path))
     block = _select_structure_block(document)
-    structure, parser_warnings = _load_pymatgen_structure(path)
+    structure, parser_warnings = _load_pymatgen_structure(path, block)
     detected_number, detected_symbol, warnings = _spglib_dataset(structure)
     cell = structure.lattice
     space_group_from_cif = _clean_cif_scalar(block.find_value("_symmetry_space_group_name_H-M")) or _clean_cif_scalar(

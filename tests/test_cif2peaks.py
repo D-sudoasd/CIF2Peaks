@@ -138,6 +138,47 @@ _atom_site_occupancy
 ? ? ? ? ? ?
 """
 
+MULTI_BLOCK_PUBLISHED_BEFORE_STANDARDIZED_CIF = """
+data_sm_global
+_audit_creation_method 'metadata only'
+
+data_probe-published_cell
+_cell_length_a 4.0
+_cell_length_b 4.0
+_cell_length_c 4.0
+_cell_angle_alpha 90
+_cell_angle_beta 90
+_cell_angle_gamma 90
+_symmetry_space_group_name_H-M 'P 2 3'
+_symmetry_Int_Tables_number 195
+loop_
+_atom_site_label
+_atom_site_type_symbol
+_atom_site_fract_x
+_atom_site_fract_y
+_atom_site_fract_z
+_atom_site_occupancy
+Si1 Si 0 0 0 1
+
+data_probe-standardized_unitcell
+_cell_length_a 3.0
+_cell_length_b 3.0
+_cell_length_c 3.0
+_cell_angle_alpha 90
+_cell_angle_beta 90
+_cell_angle_gamma 90
+_symmetry_space_group_name_H-M 'P 1'
+_symmetry_Int_Tables_number 1
+loop_
+_atom_site_label
+_atom_site_type_symbol
+_atom_site_fract_x
+_atom_site_fract_y
+_atom_site_fract_z
+_atom_site_occupancy
+Si1 Si 0 0 0 1
+"""
+
 
 def _write_ni_occupancy_cif(path: Path) -> Path:
     path.write_text(textwrap.dedent(NI_OCCUPANCY_CIF).strip() + "\n", encoding="utf-8")
@@ -146,6 +187,11 @@ def _write_ni_occupancy_cif(path: Path) -> Path:
 
 def _write_multi_block_standardized_cif(path: Path) -> Path:
     path.write_text(textwrap.dedent(MULTI_BLOCK_STANDARDIZED_CIF).strip() + "\n", encoding="utf-8")
+    return path
+
+
+def _write_multi_block_published_before_standardized_cif(path: Path) -> Path:
+    path.write_text(textwrap.dedent(MULTI_BLOCK_PUBLISHED_BEFORE_STANDARDIZED_CIF).strip() + "\n", encoding="utf-8")
     return path
 
 
@@ -1085,6 +1131,18 @@ def test_cif2peaks_loads_standardized_unitcell_from_multi_block_cif(tmp_path: Pa
     assert phase.display_space_group == "Pm-3m"
     assert phase.crystal.cell_parameters[:3] == (3.0, 3.0, 3.0)
     assert any("CIF reports P 1" in warning and "spglib detected Pm-3m" in warning for warning in phase.warning_messages)
+
+
+def test_cif2peaks_uses_selected_structure_block_for_pymatgen_structure(tmp_path: Path) -> None:
+    cif_path = _write_multi_block_published_before_standardized_cif(tmp_path / "multi_block_reordered.cif")
+    service = Cif2PeaksService()
+
+    phase = service.load_phase(cif_path)
+
+    assert phase.error is None
+    assert phase.crystal is not None
+    assert phase.crystal.validation_report.space_group_from_cif == "P 1"
+    assert phase.crystal.cell_parameters[:3] == (3.0, 3.0, 3.0)
 
 
 def test_cif2peaks_exports_detected_space_group_and_preserves_cif_space_group(tmp_path: Path) -> None:

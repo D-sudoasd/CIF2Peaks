@@ -2068,14 +2068,24 @@ def _launch_tk_app(initial_paths: Sequence[str | Path] = ()) -> None:
 
     def export_now() -> None:
         nonlocal last_output_path
-        if not (export_peaks_var.get() or export_patterns_var.get()):
+        export_peaks_snapshot = export_peaks_var.get()
+        export_patterns_snapshot = export_patterns_var.get()
+        export_publication_snapshot = publication_svg_var.get()
+        output_snapshot = output_var.get()
+        energy_snapshot = energy_var.get()
+        xray_preset_snapshot = xray_preset_var.get()
+        d_min_snapshot = min_var.get()
+        d_max_snapshot = max_var.get()
+        pattern_axis_snapshot = pattern_axis_var.get()
+        publication_preset_snapshot = publication_preset_var.get()
+        if not (export_peaks_snapshot or export_patterns_snapshot):
             status_var.set(_gui_text(lang(), "select_export_type"))
             return
         try:
             peak_output, pattern_output = export_output_paths(
-                normalize_xlsx_output_path(output_var.get()),
-                export_peaks=export_peaks_var.get(),
-                export_patterns=export_patterns_var.get(),
+                normalize_xlsx_output_path(output_snapshot),
+                export_peaks=export_peaks_snapshot,
+                export_patterns=export_patterns_snapshot,
             )
             allow_overwrite = should_overwrite_gui_outputs(
                 [peak_output, pattern_output],
@@ -2106,18 +2116,18 @@ def _launch_tk_app(initial_paths: Sequence[str | Path] = ()) -> None:
             try:
                 result = run_simple_gui_export(
                     paths_snapshot,
-                    output_var.get(),
-                    energy_keV=energy_var.get(),
-                    xray_preset=xray_preset_var.get(),
-                    d_min_A=min_var.get(),
-                    d_max_A=max_var.get(),
+                    output_snapshot,
+                    energy_keV=energy_snapshot,
+                    xray_preset=xray_preset_snapshot,
+                    d_min_A=d_min_snapshot,
+                    d_max_A=d_max_snapshot,
                     display_names=display_names_snapshot,
                     elastic_constants=elastic_constants_snapshot,
-                    export_peaks=export_peaks_var.get(),
-                    export_patterns=export_patterns_var.get(),
-                    pattern_axis=pattern_axis_var.get(),  # type: ignore[arg-type]
-                    export_publication_svg=publication_svg_var.get(),
-                    publication_preset=publication_preset_var.get(),
+                    export_peaks=export_peaks_snapshot,
+                    export_patterns=export_patterns_snapshot,
+                    pattern_axis=pattern_axis_snapshot,  # type: ignore[arg-type]
+                    export_publication_svg=export_publication_snapshot,
+                    publication_preset=publication_preset_snapshot,
                 )
             except Exception as exc:
                 def finish_failure(exc: Exception = exc) -> None:

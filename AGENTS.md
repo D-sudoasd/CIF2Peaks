@@ -516,6 +516,52 @@ If such a change is required, the change entry must include:
 
 ## Recent Change Log for Agents
 
+### 2026-06-17 — Align Selected CIF Block With Pymatgen Structure
+
+- **Agent / Author**: Codex
+- **Branch / Commit**: `main` / not committed at time of entry
+- **Files Changed**: `src/cif2peaks/structure.py`,
+  `src/cif2peaks/gui.py`, `tests/test_cif2peaks.py`, `AGENTS.md`
+- **Change Type**:
+  - [x] Bug fix
+  - [ ] Refactor
+  - [x] GUI change
+  - [x] Data processing change
+  - [ ] Export / reporting change
+  - [ ] Dependency / config change
+  - [ ] Documentation only
+- **What Changed**: Pymatgen now parses the same Gemmi-selected structural
+  CIF block used for metadata, including the occupancy-tolerance fallback.
+  GUI export now snapshots Tk variable values before starting the background
+  export thread.
+- **Why It Changed**: A reordered multi-block CIF could choose
+  `standardized_unitcell` for metadata while pymatgen simulated the first
+  structural block, making exported metadata and peak positions come from
+  different CIF blocks. Tkinter variables should not be read from background
+  worker threads during GUI export.
+- **Impact Scope**: CIF parsing consistency for multi-block files and GUI
+  export-thread stability. XRD formulas, wavelength defaults, exported column
+  names, sheet names, CLI options, and quick-export defaults are unchanged.
+- **Risk Level**: Medium
+- **Compatibility Notes**: Existing single-block and standardized-first
+  multi-block behavior is preserved. The changed multi-block behavior aligns
+  simulated structures with the repository's documented structural-block
+  selection policy.
+- **Validation Performed**: Added a failing regression test with
+  `published_cell` before `standardized_unitcell`, confirmed it failed on the
+  previous path, then passed after the fix. Ran targeted multi-block,
+  occupancy, GUI, quick-export, batch, and pattern tests; GUI smoke startup;
+  `compileall`; `pip check`; and the full pytest suite in the local `.venv`
+  Python 3.13 runtime.
+- **Known Limitations**: GUI smoke startup does not replace manual high-DPI
+  visual review or full Windows portable-app testing. Publication figure
+  sidecars are still not included in the GUI overwrite confirmation set.
+- **Rollback Notes**: Revert the `_load_pymatgen_structure` block-argument
+  change, the GUI export snapshot block, and the new regression test if the
+  previous file-order-based pymatgen parsing behavior is required.
+- **Follow-up Needed**: Consider adding overwrite confirmation for existing
+  publication figure sidecars before public release.
+
 ### 2026-06-13 — Tighten GUI Export Option States
 
 - **Agent / Author**: Codex
