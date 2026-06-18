@@ -516,6 +516,50 @@ If such a change is required, the change entry must include:
 
 ## Recent Change Log for Agents
 
+### 2026-06-18 — Guard GUI Figure Sidecar Overwrites
+
+- **Agent / Author**: Codex
+- **Branch / Commit**: `main` / not committed at time of entry
+- **Files Changed**: `src/cif2peaks/gui.py`, `tests/test_cif2peaks.py`,
+  `AGENTS.md`
+- **Change Type**:
+  - [x] Bug fix
+  - [ ] Refactor
+  - [x] GUI change
+  - [ ] Data processing change
+  - [ ] Export / reporting change
+  - [ ] Dependency / config change
+  - [ ] Documentation only
+- **What Changed**: Added `planned_gui_output_paths()` so GUI overwrite
+  confirmation checks planned publication SVG/PDF/EPS/PNG/TIFF sidecars in
+  addition to workbook outputs, and generalized the overwrite dialog copy from
+  “Excel workbook” to “output file”.
+- **Why It Changed**: GUI export previously warned only for the main workbook
+  and optional pattern workbook, so enabling publication figures could silently
+  overwrite existing sidecar plots without confirmation.
+- **Impact Scope**: GUI export overwrite confirmation only. XRD formulas, CIF
+  parsing, export schemas, CLI options, workbook naming, and figure content are
+  unchanged.
+- **Risk Level**: Low
+- **Compatibility Notes**: Existing workbook and figure filenames are
+  preserved. Confirmation is now more conservative because it plans figure
+  paths from the selected CIF list before the background export begins.
+- **Validation Performed**: Added a failing regression test first, confirmed it
+  failed from the missing helper import, then passed after the fix. Ran
+  `.\.venv\Scripts\python.exe -m compileall -q src tests scripts`,
+  `.\.venv\Scripts\python.exe -m pytest tests\test_cif2peaks.py -k "gui_defines_tooltips_and_clear_confirmation_contract or simple_gui_export_can_write_publication_vector_sidecars or simple_gui_export_can_write_only_patterns_or_both_outputs" -q`,
+  `.\.venv\Scripts\python.exe -m pytest -q`,
+  `.\.venv\Scripts\python.exe -m pip check`, and GUI smoke startup with
+  `CIF2PEAKS_SMOKE_TEST=1`.
+- **Known Limitations**: The pre-export overwrite plan is conservative for CIFs
+  that later fail to simulate, so users may occasionally confirm a figure path
+  that ends up not being regenerated in that run.
+- **Rollback Notes**: Revert `planned_gui_output_paths()`, the export dialog
+  call-site update, the generic overwrite-dialog copy, and the regression test
+  if workbook-only overwrite confirmation is preferred.
+- **Follow-up Needed**: Consider whether stale figure sidecars from older runs
+  should be surfaced separately when the current export contains fewer phases.
+
 ### 2026-06-17 — Align Selected CIF Block With Pymatgen Structure
 
 - **Agent / Author**: Codex

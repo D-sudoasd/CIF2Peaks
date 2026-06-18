@@ -2125,6 +2125,7 @@ def test_gui_defines_tooltips_and_clear_confirmation_contract(tmp_path: Path) ->
         GUI_TEXT,
         GUI_TOOLTIP_KEYS,
         SUPPORTED_GUI_LANGUAGES,
+        planned_gui_output_paths,
         should_clear_gui_files,
         should_overwrite_gui_output,
         should_overwrite_gui_outputs,
@@ -2198,6 +2199,20 @@ def test_gui_defines_tooltips_and_clear_confirmation_contract(tmp_path: Path) ->
     overwrite_calls.clear()
     assert should_overwrite_gui_outputs([None, peak_output, pattern_output, peak_output], lambda path: overwrite_calls.append(path) or True)
     assert overwrite_calls == [peak_output.resolve(), pattern_output.resolve()]
+
+    planned_outputs = planned_gui_output_paths(
+        tmp_path / "review_target.xlsx",
+        [tmp_path / "alpha.cif", tmp_path / "beta.cif"],
+        display_names={tmp_path / "alpha.cif": "Alpha phase"},
+        export_peaks=True,
+        export_patterns=False,
+        export_publication_figures=True,
+    )
+    assert planned_outputs[0] == (tmp_path / "review_target.xlsx").resolve()
+    assert (tmp_path / "review_target_01_Alpha_phase_publication.svg").resolve() in planned_outputs
+    assert (tmp_path / "review_target_01_Alpha_phase_publication.png").resolve() in planned_outputs
+    assert (tmp_path / "review_target_02_beta_cif_publication.tif").resolve() in planned_outputs
+    assert len(planned_outputs) == 11
 
 
 def test_publication_figure_presets_cover_common_export_contexts() -> None:

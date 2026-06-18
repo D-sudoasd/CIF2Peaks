@@ -241,7 +241,7 @@ GUI_TEXT = {
         "confirm_clear_title": "清空 CIF 列表",
         "confirm_clear_message": "确定清空当前 CIF 列表和预览吗？这不会删除磁盘上的原始文件。",
         "confirm_overwrite_title": "覆盖已有文件",
-        "confirm_overwrite_message": "目标 Excel 已存在：\n{path}\n\n是否覆盖该文件？",
+        "confirm_overwrite_message": "目标输出文件已存在：\n{path}\n\n是否覆盖该文件？",
     },
     "en": {
         "window_title": "CIF2peaks - CIF to Excel",
@@ -370,7 +370,7 @@ GUI_TEXT = {
         "confirm_clear_title": "Clear CIF list",
         "confirm_clear_message": "Clear the current CIF list and preview? This will not delete source files from disk.",
         "confirm_overwrite_title": "Overwrite existing file",
-        "confirm_overwrite_message": "The target Excel workbook already exists:\n{path}\n\nOverwrite this file?",
+        "confirm_overwrite_message": "The target output file already exists:\n{path}\n\nOverwrite this file?",
     },
 }
 
@@ -903,6 +903,32 @@ def normalize_xlsx_output_path(output_path: str | Path) -> Path:
     if path.suffix.lower() != ".xlsx":
         path = path.with_suffix(".xlsx")
     return path
+
+
+def planned_gui_output_paths(
+    output_path: str | Path,
+    selected_paths: Sequence[str | Path],
+    *,
+    display_names: Mapping[str | Path, str] | None = None,
+    export_peaks: bool,
+    export_patterns: bool,
+    export_publication_figures: bool,
+) -> list[Path]:
+    output = normalize_xlsx_output_path(output_path)
+    peak_output, pattern_output = export_output_paths(output, export_peaks=export_peaks, export_patterns=export_patterns)
+    planned_paths = [path.resolve() for path in (peak_output, pattern_output) if path is not None]
+    primary_output = peak_output or pattern_output
+    if not export_publication_figures or primary_output is None:
+        return planned_paths
+
+    display_name_lookup = _resolved_display_name_lookup(display_names)
+    for index, selected_path in enumerate(selected_paths, start=1):
+        phase_name = _display_name_for_path(Path(selected_path), display_name_lookup)
+        planned_paths.extend(
+            _publication_figure_path(primary_output, phase_name, index, suffix).resolve()
+            for suffix in (".svg", ".pdf", ".eps", ".png", ".tif")
+        )
+    return planned_paths
 
 
 def split_drop_event_paths(drop_data: str, splitlist: Callable[[str], Sequence[str]]) -> list[str]:
@@ -2078,17 +2104,23 @@ def _launch_tk_app(initial_paths: Sequence[str | Path] = ()) -> None:
         d_max_snapshot = max_var.get()
         pattern_axis_snapshot = pattern_axis_var.get()
         publication_preset_snapshot = publication_preset_var.get()
+        paths_snapshot = list(selected_paths)
+        display_names_snapshot = {path: display_names.get(path, path.name) for path in paths_snapshot}
+        elastic_constants_snapshot = {path: elastic_constants[path] for path in paths_snapshot if path in elastic_constants}
         if not (export_peaks_snapshot or export_patterns_snapshot):
             status_var.set(_gui_text(lang(), "select_export_type"))
             return
         try:
-            peak_output, pattern_output = export_output_paths(
-                normalize_xlsx_output_path(output_snapshot),
+            planned_outputs = planned_gui_output_paths(
+                output_snapshot,
+                paths_snapshot,
+                display_names=display_names_snapshot,
                 export_peaks=export_peaks_snapshot,
                 export_patterns=export_patterns_snapshot,
+                export_publication_figures=export_publication_snapshot,
             )
             allow_overwrite = should_overwrite_gui_outputs(
-                [peak_output, pattern_output],
+                planned_outputs,
                 lambda path: messagebox.askyesno(
                     _gui_text(lang(), "confirm_overwrite_title"),
                     _gui_text(lang(), "confirm_overwrite_message", path=path),
@@ -2108,9 +2140,6 @@ def _launch_tk_app(initial_paths: Sequence[str | Path] = ()) -> None:
         status_var.set(_gui_text(lang(), "exporting"))
         append_activity(_gui_text(lang(), "log_exporting"))
         tree.delete(*tree.get_children())
-        paths_snapshot = list(selected_paths)
-        display_names_snapshot = {path: display_names.get(path, path.name) for path in paths_snapshot}
-        elastic_constants_snapshot = {path: elastic_constants[path] for path in paths_snapshot if path in elastic_constants}
 
         def worker() -> None:
             try:
