@@ -516,6 +516,53 @@ If such a change is required, the change entry must include:
 
 ## Recent Change Log for Agents
 
+### 2026-06-29 — Improve GUI Result Guidance and Workbook Reading Hints
+
+- **Agent / Author**: Codex
+- **Branch / Commit**: `main` / not committed at time of entry
+- **Files Changed**: `src/cif2peaks/gui.py`,
+  `src/cif2peaks/exporters.py`, `tests/test_cif2peaks.py`, `AGENTS.md`
+- **Change Type**:
+  - [x] Bug fix
+  - [ ] Refactor
+  - [x] GUI change
+  - [ ] Data processing change
+  - [x] Export / reporting change
+  - [ ] Dependency / config change
+  - [ ] Documentation only
+- **What Changed**: Added GUI export diagnostics for failed, warning, and
+  zero-peak phases, backed by explicit per-phase error flags from
+  `phase.error`; expanded completion/status/activity guidance; grouped visible
+  GUI settings into required parameters, output content, optional outputs, and
+  optional Cij elastic constants; and added workbook reading, warning,
+  `R_hkl`, and Cij guidance rows to `Summary` and `使用说明`.
+- **Why It Changed**: Ordinary GUI users needed clearer next steps after
+  export and clearer separation between mandatory settings and optional
+  advanced outputs without changing the scientific calculation path.
+- **Impact Scope**: GUI text/layout hierarchy and workbook guidance only.
+  XRD formulas, wavelength defaults, `R_hkl` semantics, exported peak columns,
+  sheet names, CLI options, and Windows launcher names are unchanged.
+- **Risk Level**: Low
+- **Compatibility Notes**: Existing sheet names and exported field headers are
+  preserved. `Summary` and `使用说明` gain additional explanatory rows, so users
+  parsing those sheets by fixed row number should switch to key/name-based
+  lookup.
+- **Validation Performed**: Added failing tests for GUI diagnostics,
+  completion guidance, workbook reading guidance, language-pack coverage, and
+  simulation-stage export failures where CIF metadata exists but XRD
+  calculation fails, then passed them. Ran `py -3.11 -m pytest
+  tests\test_cif2peaks.py -k "gui or guide or Summary or beginner" -q`,
+  `py -3.11 -m compileall -q src tests scripts`, `py -3.11 -m pytest -q`,
+  and GUI smoke startup with `CIF2PEAKS_SMOKE_TEST=1 py -3.11 -m cif2peaks.gui`.
+- **Known Limitations**: GUI smoke startup does not replace manual high-DPI
+  visual review. No new persisted export status schema was added; the explicit
+  GUI error flags are scoped to completion/status reporting.
+- **Rollback Notes**: Revert the GUI diagnostics/text/layout changes, the
+  added workbook guidance rows, and the associated tests to restore the
+  previous concise completion messages and workbook guide content.
+- **Follow-up Needed**: Consider a manual visual QA pass on common Windows
+  display scaling settings before a public portable-app release.
+
 ### 2026-06-18 — Guard GUI Figure Sidecar Overwrites
 
 - **Agent / Author**: Codex

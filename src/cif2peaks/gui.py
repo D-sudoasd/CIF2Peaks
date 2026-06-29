@@ -36,6 +36,7 @@ class SimpleGuiExportResult:
     peak_output_path: Path | None = None
     pattern_output_path: Path | None = None
     publication_figure_paths: list[Path] = field(default_factory=list)
+    phase_error_flags: list[bool] = field(default_factory=list)
 
 
 @dataclass(frozen=True)
@@ -43,6 +44,15 @@ class SimpleGuiPreviewResult:
     ready_count: int
     failed_count: int
     phase_rows: list[tuple[str, str, str, str, str, str]]
+
+
+@dataclass(frozen=True)
+class GuiExportDiagnostics:
+    total_phases: int
+    ready_count: int
+    failed_count: int
+    warning_count: int
+    zero_peak_count: int
 
 
 @dataclass(frozen=True)
@@ -123,6 +133,10 @@ GUI_TEXT = {
         "workspace_section": "XRD Peak Reference Workbench",
         "data_source_title": "CIF 数据源",
         "parameters_title": "导出参数",
+        "required_parameters_group": "必需参数",
+        "output_content_group": "输出内容",
+        "optional_outputs_group": "可选输出",
+        "advanced_elastic_group": "可选高级项：Cij 弹性常数",
         "preview_title": "峰表预览",
         "status_ready": "就绪",
         "files_panel": "1. 添加 CIF 文件并命名",
@@ -201,6 +215,7 @@ GUI_TEXT = {
         "export_failed_title": "导出失败",
         "export_done_title": "导出完成",
         "export_cancelled_overwrite": "已取消导出：目标文件已存在。",
+        "result_next_step": "下一步：先打开 使用说明 看阅读顺序，再看 Summary 检查错误/警告，常用峰表看 推荐峰表。",
         "log_ready": "就绪：等待添加 CIF 文件。",
         "log_added": "{source}：加入 {added} 个 CIF{suffix}。",
         "log_add_none": "{source}：没有新增 CIF，已忽略 {ignored} 项。",
@@ -209,7 +224,7 @@ GUI_TEXT = {
         "log_preview_ready": "预览完成：{ready} 个 CIF 可导出。",
         "log_preview_with_failures": "预览完成：{ready} 个可导出，{failed} 个无法读取。",
         "log_exporting": "开始导出：正在计算峰表并写入结果文件。",
-        "log_export_done": "导出完成：{peaks} 条峰记录。",
+        "log_export_done": "导出完成：{peaks} 条峰记录；失败 {failed} 个，警告 {warnings} 个，零峰 {zero_peaks} 个。",
         "log_export_failed": "导出失败：请查看错误提示。",
         "log_export_cancelled": "导出已取消：目标文件已存在。",
         "drop_unavailable_short": "当前窗口拖放不可用；请使用“添加文件”或把 CIF 拖到 EXE 图标上启动。",
@@ -252,6 +267,10 @@ GUI_TEXT = {
         "workspace_section": "XRD Peak Reference Workbench",
         "data_source_title": "CIF data source",
         "parameters_title": "Export parameters",
+        "required_parameters_group": "Required settings",
+        "output_content_group": "Output content",
+        "optional_outputs_group": "Optional outputs",
+        "advanced_elastic_group": "Optional advanced: Cij elastic constants",
         "preview_title": "Peak table preview",
         "status_ready": "Ready",
         "files_panel": "1. Add and name CIF files",
@@ -330,6 +349,7 @@ GUI_TEXT = {
         "export_failed_title": "Export failed",
         "export_done_title": "Export complete",
         "export_cancelled_overwrite": "Export cancelled: target file already exists.",
+        "result_next_step": "Next step: open the User Guide for reading order, check Summary for errors/warnings, then use the Recommended peak table.",
         "log_ready": "Ready: waiting for CIF files.",
         "log_added": "{source}: added {added} CIF file(s){suffix}.",
         "log_add_none": "{source}: no new CIF files; ignored {ignored} item(s).",
@@ -338,7 +358,7 @@ GUI_TEXT = {
         "log_preview_ready": "Preview complete: {ready} CIF file(s) ready to export.",
         "log_preview_with_failures": "Preview complete: {ready} ready, {failed} could not be read.",
         "log_exporting": "Started export: calculating peak tables and writing result files.",
-        "log_export_done": "Export complete: {peaks} peak record(s).",
+        "log_export_done": "Export complete: {peaks} peak record(s); {failed} failed, {warnings} warning(s), {zero_peaks} zero-peak phase(s).",
         "log_export_failed": "Export failed: see the error message.",
         "log_export_cancelled": "Export cancelled: target file already exists.",
         "drop_unavailable_short": "Window drag-and-drop is unavailable; use Add files or launch by dropping CIFs onto the EXE.",
@@ -1188,6 +1208,7 @@ def run_simple_gui_export(
             publication_figure_paths.extend([svg_path, pdf_path, eps_path, png_path, tiff_path])
 
     phase_rows: list[tuple[str, str, str, int, str, str]] = []
+    phase_error_flags: list[bool] = []
     for phase in phases:
         peak_count = 0 if phase.result is None else len(phase.result.peaks)
         phase_rows.append(
@@ -1200,31 +1221,86 @@ def run_simple_gui_export(
                 _phase_elastic_status_text(phase),
             )
         )
+        phase_error_flags.append(bool(phase.error))
     return SimpleGuiExportResult(
         output_path=primary_output,
         total_peaks=sum(row[3] for row in phase_rows),
         phase_rows=phase_rows,
+        phase_error_flags=phase_error_flags,
         peak_output_path=peak_output,
         pattern_output_path=pattern_output,
         publication_figure_paths=publication_figure_paths,
     )
 
 
+def _phase_row_is_failed(row: tuple[str, str, str, int, str, str]) -> bool:
+    _phase_name, formula, space_group, peak_count, warning, _elastic = row
+    return peak_count == 0 and bool(str(warning).strip()) and str(formula).strip() == "-" and str(space_group).strip() == "-"
+
+
+def summarize_gui_export_result(result: SimpleGuiExportResult) -> GuiExportDiagnostics:
+    failed_count = 0
+    warning_count = 0
+    zero_peak_count = 0
+    explicit_error_flags = result.phase_error_flags if len(result.phase_error_flags) == len(result.phase_rows) else None
+    for index, row in enumerate(result.phase_rows):
+        _phase_name, _formula, _space_group, peak_count, warning, _elastic = row
+        failed = explicit_error_flags[index] if explicit_error_flags is not None else _phase_row_is_failed(row)
+        if failed:
+            failed_count += 1
+        elif str(warning).strip():
+            warning_count += 1
+        if peak_count == 0 and not failed:
+            zero_peak_count += 1
+    total_phases = len(result.phase_rows)
+    return GuiExportDiagnostics(
+        total_phases=total_phases,
+        ready_count=total_phases - failed_count,
+        failed_count=failed_count,
+        warning_count=warning_count,
+        zero_peak_count=zero_peak_count,
+    )
+
+
+def _diagnostic_status_line(summary: GuiExportDiagnostics, language: str) -> str:
+    if language == "en":
+        return (
+            f"Phase status: {summary.ready_count} usable/reviewable, "
+            f"{summary.failed_count} failed, {summary.warning_count} with warnings, "
+            f"{summary.zero_peak_count} with zero peaks."
+        )
+    return (
+        f"相状态：可用/待检查 {summary.ready_count} 个，失败 {summary.failed_count} 个，"
+        f"含警告 {summary.warning_count} 个，零峰 {summary.zero_peak_count} 个。"
+    )
+
+
 def simple_export_message_lines(result: SimpleGuiExportResult, language: str = "zh") -> list[str]:
+    summary = summarize_gui_export_result(result)
     if result.total_peaks:
         if language == "en":
-            summary_lines = [f"Exported {result.total_peaks} peak record(s)."]
+            summary_lines = [
+                f"Exported {result.total_peaks} peak record(s).",
+                _diagnostic_status_line(summary, language),
+                _gui_text(language, "result_next_step"),
+            ]
         else:
-            summary_lines = [f"已导出 {result.total_peaks} 条峰记录。"]
+            summary_lines = [
+                f"已导出 {result.total_peaks} 条峰记录。",
+                _diagnostic_status_line(summary, language),
+                _gui_text(language, "result_next_step"),
+            ]
     elif language == "en":
         summary_lines = [
             "No usable peak records were produced, but a diagnostic Excel workbook was generated.",
+            _diagnostic_status_line(summary, language),
             "Open Summary and User Guide to inspect CIF issues.",
         ]
     else:
         summary_lines = [
             "未得到可用峰记录，但已生成诊断 Excel。",
-            "请打开 Summary 和 使用说明 查看 CIF 问题。",
+            _diagnostic_status_line(summary, language),
+            "请先打开 Summary 和 使用说明 查看 CIF 问题。",
         ]
     output_lines = [*summary_lines, "", str(result.output_path)]
     if result.pattern_output_path is not None and result.pattern_output_path != result.output_path:
@@ -1237,16 +1313,17 @@ def simple_export_message_lines(result: SimpleGuiExportResult, language: str = "
 
 
 def gui_export_completion_text(result: SimpleGuiExportResult, language: str = "zh") -> tuple[str, str]:
+    summary = summarize_gui_export_result(result)
     if result.total_peaks:
         status_text = (
-            f"Done: exported {result.total_peaks} peak record(s)."
+            f"Done: exported {result.total_peaks} peak record(s); {summary.failed_count} failed, {summary.warning_count} warning(s)."
             if language == "en"
-            else f"完成：已导出 {result.total_peaks} 条峰记录。"
+            else f"完成：已导出 {result.total_peaks} 条峰记录；失败 {summary.failed_count} 个，警告 {summary.warning_count} 个。"
         )
     elif language == "en":
-        status_text = "Done: generated a diagnostic Excel workbook; no usable peak records."
+        status_text = f"Done: generated a diagnostic Excel workbook; {summary.failed_count} failed, no usable peak records."
     else:
-        status_text = "完成：已生成诊断 Excel；未得到可用峰记录。"
+        status_text = f"完成：已生成诊断 Excel；失败 {summary.failed_count} 个，未得到可用峰记录。"
     return status_text, "\n".join(simple_export_message_lines(result, language))
 
 
@@ -1500,19 +1577,21 @@ def _launch_tk_app(initial_paths: Sequence[str | Path] = ()) -> None:
     elastic_frame.columnconfigure(0, weight=1)
     elastic_label = ttk.Label(elastic_frame, style="Card.TLabel")
     elastic_label.grid(row=0, column=0, sticky="w")
+    elastic_cubic_label = ttk.Label(elastic_frame, style="CardSubtitle.TLabel")
+    elastic_cubic_label.grid(row=1, column=0, sticky="w", pady=(4, 0))
     elastic_quick_frame = ttk.Frame(elastic_frame, style="CardBody.TFrame")
-    elastic_quick_frame.grid(row=1, column=0, sticky="ew", pady=(4, 0))
+    elastic_quick_frame.grid(row=2, column=0, sticky="ew", pady=(4, 0))
     elastic_quick_frame.columnconfigure(0, weight=1)
     elastic_entry = ttk.Entry(elastic_quick_frame, textvariable=elastic_cubic_var)
     elastic_entry.grid(row=0, column=0, sticky="ew", padx=(0, 6))
     fill_cubic_button = ttk.Button(elastic_quick_frame, style="Action.TButton")
     fill_cubic_button.grid(row=0, column=1)
     elastic_matrix_label = ttk.Label(elastic_frame, style="Card.TLabel")
-    elastic_matrix_label.grid(row=2, column=0, sticky="w", pady=(6, 0))
+    elastic_matrix_label.grid(row=3, column=0, sticky="w", pady=(6, 0))
     elastic_cell_vars = [[tk.StringVar(value="") for _column in range(CIJ_TABLE_SIZE)] for _row in range(CIJ_TABLE_SIZE)]
     elastic_cell_entries: list[list[object]] = []
     elastic_grid_frame = ttk.Frame(elastic_frame, style="CardBody.TFrame")
-    elastic_grid_frame.grid(row=3, column=0, sticky="ew", pady=(4, 0))
+    elastic_grid_frame.grid(row=4, column=0, sticky="ew", pady=(4, 0))
     for column in range(CIJ_TABLE_SIZE + 1):
         elastic_grid_frame.columnconfigure(column, weight=0)
     ttk.Label(elastic_grid_frame, text="", style="CardSubtitle.TLabel", width=3).grid(row=0, column=0)
@@ -1541,22 +1620,22 @@ def _launch_tk_app(initial_paths: Sequence[str | Path] = ()) -> None:
             entry_row.append(cell_entry)
         elastic_cell_entries.append(entry_row)
     elastic_matrix_buttons = ttk.Frame(elastic_frame, style="CardBody.TFrame")
-    elastic_matrix_buttons.grid(row=4, column=0, sticky="ew", pady=(6, 0))
+    elastic_matrix_buttons.grid(row=5, column=0, sticky="ew", pady=(6, 0))
     paste_elastic_button = ttk.Button(elastic_matrix_buttons, style="Action.TButton")
     paste_elastic_button.grid(row=0, column=0, padx=(0, 6))
     copy_elastic_button = ttk.Button(elastic_matrix_buttons, style="Action.TButton")
     copy_elastic_button.grid(row=0, column=1)
     elastic_source_frame = ttk.Frame(elastic_frame, style="CardBody.TFrame")
-    elastic_source_frame.grid(row=5, column=0, sticky="ew", pady=(6, 0))
+    elastic_source_frame.grid(row=6, column=0, sticky="ew", pady=(6, 0))
     elastic_source_frame.columnconfigure(1, weight=1)
     elastic_source_label = ttk.Label(elastic_source_frame, style="Card.TLabel")
     elastic_source_label.grid(row=0, column=0, sticky="w", padx=(0, 6))
     elastic_source_entry = ttk.Entry(elastic_source_frame, textvariable=elastic_source_var)
     elastic_source_entry.grid(row=0, column=1, sticky="ew")
     elastic_status_label = ttk.Label(elastic_frame, textvariable=elastic_status_var, style="ElasticMuted.TLabel", wraplength=300)
-    elastic_status_label.grid(row=6, column=0, sticky="ew", pady=(6, 0))
+    elastic_status_label.grid(row=7, column=0, sticky="ew", pady=(6, 0))
     elastic_action_frame = ttk.Frame(elastic_frame, style="CardBody.TFrame")
-    elastic_action_frame.grid(row=7, column=0, sticky="ew", pady=(6, 0))
+    elastic_action_frame.grid(row=8, column=0, sticky="ew", pady=(6, 0))
     apply_elastic_button = ttk.Button(elastic_action_frame, style="Action.TButton")
     apply_elastic_button.grid(row=0, column=0, padx=(0, 6))
     clear_elastic_button = ttk.Button(elastic_action_frame, style="Action.TButton")
@@ -1841,11 +1920,13 @@ def _launch_tk_app(initial_paths: Sequence[str | Path] = ()) -> None:
     ttk.Label(settings_panel, textvariable=settings_summary_var, style="CardSubtitle.TLabel").grid(
         row=1, column=0, columnspan=2, sticky="w", pady=(0, 12)
     )
+    required_parameters_label = ttk.Label(settings_panel, style="Card.TLabel")
+    required_parameters_label.grid(row=2, column=0, columnspan=2, sticky="w", pady=(0, 4))
     output_label = ttk.Label(settings_panel, style="Card.TLabel")
-    output_label.grid(row=2, column=0, sticky="w", pady=5)
+    output_label.grid(row=3, column=0, sticky="w", pady=5)
 
     output_frame = ttk.Frame(settings_panel, style="CardBody.TFrame")
-    output_frame.grid(row=2, column=1, sticky="ew", pady=5)
+    output_frame.grid(row=3, column=1, sticky="ew", pady=5)
     output_frame.columnconfigure(0, weight=1)
     output_entry = ttk.Entry(output_frame, textvariable=output_var)
     output_entry.grid(row=0, column=0, sticky="ew", padx=(0, 6))
@@ -1888,18 +1969,18 @@ def _launch_tk_app(initial_paths: Sequence[str | Path] = ()) -> None:
         settings_summary_var.set(_gui_text(lang(), "settings_summary", source=source_text, range=range_text))
 
     xray_preset_label = ttk.Label(settings_panel, style="Card.TLabel")
-    xray_preset_label.grid(row=3, column=0, sticky="w", pady=5)
+    xray_preset_label.grid(row=4, column=0, sticky="w", pady=5)
     preset_box = ttk.Combobox(settings_panel, textvariable=xray_preset_var, values=GUI_XRAY_PRESET_LABELS, state="readonly", width=12)
-    preset_box.grid(row=3, column=1, sticky="w", pady=5)
+    preset_box.grid(row=4, column=1, sticky="w", pady=5)
     manual_energy_label = ttk.Label(settings_panel, style="Card.TLabel")
-    manual_energy_label.grid(row=4, column=0, sticky="w", pady=5)
+    manual_energy_label.grid(row=5, column=0, sticky="w", pady=5)
     manual_energy_entry = ttk.Entry(settings_panel, textvariable=energy_var, width=12)
-    manual_energy_entry.grid(row=4, column=1, sticky="w", pady=5)
+    manual_energy_entry.grid(row=5, column=1, sticky="w", pady=5)
 
     range_frame = ttk.Frame(settings_panel, style="CardBody.TFrame")
-    range_frame.grid(row=5, column=1, sticky="w", pady=5)
+    range_frame.grid(row=6, column=1, sticky="w", pady=5)
     d_range_label = ttk.Label(settings_panel, style="Card.TLabel")
-    d_range_label.grid(row=5, column=0, sticky="w", pady=5)
+    d_range_label.grid(row=6, column=0, sticky="w", pady=5)
     d_min_entry = ttk.Entry(range_frame, textvariable=min_var, width=8)
     d_min_entry.grid(row=0, column=0, sticky="w")
     d_range_to_label = ttk.Label(range_frame, style="Card.TLabel")
@@ -1908,12 +1989,14 @@ def _launch_tk_app(initial_paths: Sequence[str | Path] = ()) -> None:
     d_max_entry.grid(row=0, column=2, sticky="w")
     d_range_unit_label = ttk.Label(range_frame, style="Card.TLabel")
     d_range_unit_label.grid(row=0, column=3, sticky="w")
+    output_content_label = ttk.Label(settings_panel, style="Card.TLabel")
+    output_content_label.grid(row=7, column=0, columnspan=2, sticky="w", pady=(8, 4))
     export_peaks_check = ttk.Checkbutton(settings_panel, variable=export_peaks_var)
-    export_peaks_check.grid(row=6, column=0, columnspan=2, sticky="w", pady=(8, 0))
+    export_peaks_check.grid(row=8, column=0, columnspan=2, sticky="w", pady=(0, 0))
     export_patterns_check = ttk.Checkbutton(settings_panel, variable=export_patterns_var)
-    export_patterns_check.grid(row=7, column=0, columnspan=2, sticky="w", pady=(4, 0))
+    export_patterns_check.grid(row=9, column=0, columnspan=2, sticky="w", pady=(4, 0))
     pattern_axis_label = ttk.Label(settings_panel, style="Card.TLabel")
-    pattern_axis_label.grid(row=8, column=0, sticky="w", pady=5)
+    pattern_axis_label.grid(row=10, column=0, sticky="w", pady=5)
     pattern_axis_box = ttk.Combobox(
         settings_panel,
         textvariable=pattern_axis_var,
@@ -1921,11 +2004,13 @@ def _launch_tk_app(initial_paths: Sequence[str | Path] = ()) -> None:
         state="readonly",
         width=12,
     )
-    pattern_axis_box.grid(row=8, column=1, sticky="w", pady=5)
+    pattern_axis_box.grid(row=10, column=1, sticky="w", pady=5)
+    optional_outputs_label = ttk.Label(settings_panel, style="Card.TLabel")
+    optional_outputs_label.grid(row=11, column=0, columnspan=2, sticky="w", pady=(8, 4))
     publication_svg_check = ttk.Checkbutton(settings_panel, variable=publication_svg_var)
-    publication_svg_check.grid(row=9, column=0, columnspan=2, sticky="w", pady=(8, 0))
+    publication_svg_check.grid(row=12, column=0, columnspan=2, sticky="w", pady=(0, 0))
     figure_preset_label = ttk.Label(settings_panel, style="Card.TLabel")
-    figure_preset_label.grid(row=10, column=0, sticky="w", pady=5)
+    figure_preset_label.grid(row=13, column=0, sticky="w", pady=5)
     figure_preset_box = ttk.Combobox(
         settings_panel,
         textvariable=publication_preset_var,
@@ -1933,9 +2018,9 @@ def _launch_tk_app(initial_paths: Sequence[str | Path] = ()) -> None:
         state="readonly",
         width=18,
     )
-    figure_preset_box.grid(row=10, column=1, sticky="w", pady=5)
+    figure_preset_box.grid(row=13, column=1, sticky="w", pady=5)
     settings_hint_label = ttk.Label(settings_panel, style="CardSubtitle.TLabel")
-    settings_hint_label.grid(row=11, column=0, columnspan=2, sticky="w", pady=(8, 0))
+    settings_hint_label.grid(row=14, column=0, columnspan=2, sticky="w", pady=(8, 0))
     xray_preset_var.trace_add("write", lambda *_: update_settings_summary())
     energy_var.trace_add("write", lambda *_: update_settings_summary())
     min_var.trace_add("write", lambda *_: update_settings_summary())
@@ -2180,7 +2265,17 @@ def _launch_tk_app(initial_paths: Sequence[str | Path] = ()) -> None:
                 open_button.configure(state=tk.NORMAL)
                 status_text, dialog_text = gui_export_completion_text(result, lang())
                 status_var.set(status_text)
-                append_activity(_gui_text(lang(), "log_export_done", peaks=result.total_peaks))
+                summary = summarize_gui_export_result(result)
+                append_activity(
+                    _gui_text(
+                        lang(),
+                        "log_export_done",
+                        peaks=result.total_peaks,
+                        failed=summary.failed_count,
+                        warnings=summary.warning_count,
+                        zero_peaks=summary.zero_peak_count,
+                    )
+                )
                 messagebox.showinfo(_gui_text(lang(), "export_done_title"), dialog_text)
 
             root.after(0, finish)
@@ -2217,7 +2312,8 @@ def _launch_tk_app(initial_paths: Sequence[str | Path] = ()) -> None:
         display_name_label.configure(text=_gui_text(lang(), "display_name_label"))
         apply_name_button.configure(text=_gui_text(lang(), "apply_display_name"))
         reset_name_button.configure(text=_gui_text(lang(), "reset_display_name"))
-        elastic_label.configure(text=_gui_text(lang(), "elastic_cubic_label"))
+        elastic_label.configure(text=_gui_text(lang(), "advanced_elastic_group"))
+        elastic_cubic_label.configure(text=_gui_text(lang(), "elastic_cubic_label"))
         elastic_matrix_label.configure(text=_gui_text(lang(), "elastic_matrix_label"))
         elastic_source_label.configure(text=_gui_text(lang(), "elastic_source_label"))
         fill_cubic_button.configure(text=_gui_text(lang(), "fill_cubic_elastic"))
@@ -2230,6 +2326,9 @@ def _launch_tk_app(initial_paths: Sequence[str | Path] = ()) -> None:
         remove_button.configure(text=_gui_text(lang(), "remove_selected"))
         clear_button.configure(text=_gui_text(lang(), "clear_files"))
         settings_panel_title.configure(text=_gui_text(lang(), "parameters_title"))
+        required_parameters_label.configure(text=_gui_text(lang(), "required_parameters_group"))
+        output_content_label.configure(text=_gui_text(lang(), "output_content_group"))
+        optional_outputs_label.configure(text=_gui_text(lang(), "optional_outputs_group"))
         output_label.configure(text=_gui_text(lang(), "output_file"))
         choose_output_button.configure(text=_gui_text(lang(), "choose_output"))
         xray_preset_label.configure(text=_gui_text(lang(), "xray_preset"))

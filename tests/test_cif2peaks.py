@@ -1640,6 +1640,32 @@ def test_cif2peaks_user_guide_explains_beginner_columns_and_limits(tmp_path: Pat
     assert "crystal_cartesian_from_cif_lattice" in guide_text
 
 
+def test_cif2peaks_workbook_adds_result_reading_guidance_without_renaming_sheets(tmp_path: Path) -> None:
+    service = Cif2PeaksService()
+    phases = [service.load_phase(TI_BETA_CIF), service.load_phase(TI_NB_HCP_CIF)]
+    settings = Cif2PeaksSettings()
+    service.simulate_phases(phases, settings)
+    output = tmp_path / "result_guidance.xlsx"
+
+    export_cif2peaks_workbook(Cif2PeaksExportPayload(phases, settings), output)
+
+    sheet_names = _workbook_sheet_names(output)
+    summary_text = "\n".join("|".join(row) for row in _worksheet_rows_by_name(output, "Summary"))
+    guide_text = "\n".join("|".join(row) for row in _worksheet_rows_by_name(output, "使用说明"))
+
+    assert "Combined Peaks" in sheet_names
+    assert "推荐峰表" in sheet_names
+    assert "Elastic Constants" in sheet_names
+    assert "result_reading_order" in summary_text
+    assert "warning_guidance" in summary_text
+    assert "r_hkl_guidance" in summary_text
+    assert "elastic_guidance" in summary_text
+    assert "结果阅读顺序" in guide_text
+    assert "警告处理建议" in guide_text
+    assert "R_hkl 使用边界" in guide_text
+    assert "Cij / 弹性结果" in guide_text
+
+
 def test_batch_module_help_and_package_main_cli(tmp_path: Path) -> None:
     help_result = subprocess.run(
         [sys.executable, "-m", "cif2peaks.batch", "--help"],
@@ -1871,6 +1897,100 @@ def test_beginner_gui_can_render_error_guidance_in_english() -> None:
     assert "Add files" in message
 
 
+def test_gui_export_diagnostics_summarize_phase_outcomes(tmp_path: Path) -> None:
+    from cif2peaks.gui import SimpleGuiExportResult, summarize_gui_export_result
+
+    result = SimpleGuiExportResult(
+        output_path=tmp_path / "result.xlsx",
+        total_peaks=12,
+        phase_rows=[
+            ("alpha", "Ti", "Im-3m", 12, "", "no_elastic_constants"),
+            ("beta", "Ti", "P63/mmc", 0, "CIF warning", "valid"),
+            ("bad", "-", "-", 0, "CIF format error", "no_elastic_constants"),
+        ],
+    )
+
+    summary = summarize_gui_export_result(result)
+
+    assert summary.total_phases == 3
+    assert summary.ready_count == 2
+    assert summary.failed_count == 1
+    assert summary.warning_count == 1
+    assert summary.zero_peak_count == 1
+
+
+def test_gui_export_diagnostics_use_explicit_error_flags_for_simulation_failures(tmp_path: Path) -> None:
+    from cif2peaks.gui import SimpleGuiExportResult, summarize_gui_export_result
+
+    result = SimpleGuiExportResult(
+        output_path=tmp_path / "result.xlsx",
+        total_peaks=0,
+        phase_rows=[
+            ("loaded_but_failed", "Ti", "Im-3m", 0, "XRD calculation failed", "no_elastic_constants"),
+        ],
+        phase_error_flags=[True],
+    )
+
+    summary = summarize_gui_export_result(result)
+
+    assert summary.ready_count == 0
+    assert summary.failed_count == 1
+    assert summary.warning_count == 0
+    assert summary.zero_peak_count == 0
+
+
+def test_gui_completion_guidance_reports_outputs_and_next_steps(tmp_path: Path) -> None:
+    from cif2peaks.gui import SimpleGuiExportResult, gui_export_completion_text
+
+    peak_output = tmp_path / "result_峰表.xlsx"
+    pattern_output = tmp_path / "result_谱线.xlsx"
+    figure_output = tmp_path / "result_01_alpha_publication.svg"
+    result = SimpleGuiExportResult(
+        output_path=peak_output,
+        total_peaks=42,
+        phase_rows=[
+            ("alpha", "Ti", "Im-3m", 42, "", "no_elastic_constants"),
+            ("bad", "-", "-", 0, "CIF format error", "no_elastic_constants"),
+        ],
+        peak_output_path=peak_output,
+        pattern_output_path=pattern_output,
+        publication_figure_paths=[figure_output],
+    )
+
+    status_zh, dialog_zh = gui_export_completion_text(result, "zh")
+    status_en, dialog_en = gui_export_completion_text(result, "en")
+
+    assert "42 条峰记录" in status_zh
+    assert "失败 1 个" in dialog_zh
+    assert "下一步" in dialog_zh
+    assert "使用说明" in dialog_zh
+    assert "Summary" in dialog_zh
+    assert "推荐峰表" in dialog_zh
+    assert str(pattern_output) in dialog_zh
+    assert str(figure_output) in dialog_zh
+    assert "42 peak record" in status_en
+    assert "1 failed" in dialog_en
+    assert "Next step" in dialog_en
+    assert "User Guide" in dialog_en
+    assert "Recommended peak table" in dialog_en
+
+
+def test_gui_completion_guidance_handles_diagnostic_workbook(tmp_path: Path) -> None:
+    from cif2peaks.gui import SimpleGuiExportResult, gui_export_completion_text
+
+    result = SimpleGuiExportResult(
+        output_path=tmp_path / "diagnostic.xlsx",
+        total_peaks=0,
+        phase_rows=[("bad", "-", "-", 0, "CIF format error", "no_elastic_constants")],
+    )
+
+    status, dialog = gui_export_completion_text(result, "zh")
+
+    assert "诊断 Excel" in status
+    assert "失败 1 个" in dialog
+    assert "请先打开 Summary 和 使用说明" in dialog
+
+
 def test_beginner_gui_previews_cif_metadata_before_export(tmp_path: Path) -> None:
     from cif2peaks.gui import preview_simple_gui_inputs
 
@@ -2004,10 +2124,15 @@ def test_gui_language_pack_covers_primary_controls() -> None:
         "workspace_section",
         "data_source_title",
         "parameters_title",
+        "required_parameters_group",
+        "output_content_group",
+        "optional_outputs_group",
+        "advanced_elastic_group",
         "preview_title",
         "status_ready",
         "publication_export",
         "figure_preset",
+        "result_next_step",
     }
 
     assert set(SUPPORTED_GUI_LANGUAGES) == {"zh", "en"}
@@ -2020,6 +2145,9 @@ def test_gui_language_pack_covers_primary_controls() -> None:
     assert GUI_TEXT["zh"]["choose_output"] == "选择输出"
     assert GUI_TEXT["zh"]["apply_display_name"] == "应用相名"
     assert GUI_TEXT["zh"]["activity_log_title"] == "运行记录"
+    assert GUI_TEXT["zh"]["required_parameters_group"] == "必需参数"
+    assert GUI_TEXT["zh"]["advanced_elastic_group"] == "可选高级项：Cij 弹性常数"
+    assert "使用说明" in GUI_TEXT["zh"]["result_next_step"]
     assert "图像选项" in GUI_TEXT["zh"]["ready_to_export"]
     assert GUI_TEXT["en"]["export_excel"] == "Export results"
     assert GUI_TEXT["en"]["add_files"] == "Add CIFs"
@@ -2027,6 +2155,9 @@ def test_gui_language_pack_covers_primary_controls() -> None:
     assert GUI_TEXT["en"]["choose_output"] == "Choose output"
     assert GUI_TEXT["en"]["apply_display_name"] == "Apply phase name"
     assert GUI_TEXT["en"]["activity_log_title"] == "Activity log"
+    assert GUI_TEXT["en"]["required_parameters_group"] == "Required settings"
+    assert GUI_TEXT["en"]["advanced_elastic_group"] == "Optional advanced: Cij elastic constants"
+    assert "User Guide" in GUI_TEXT["en"]["result_next_step"]
     assert GUI_TEXT["en"]["publication_export"] == "Export figures (SVG/PDF/EPS/PNG/TIFF)"
     assert GUI_TEXT["en"]["settings_hint"] == "Manual energy overrides preset; blank uses preset."
     assert "figure options" in GUI_TEXT["en"]["ready_to_export"]
@@ -2092,6 +2223,8 @@ def test_gui_activity_log_language_pack_covers_user_feedback_events() -> None:
     assert "added" in GUI_TEXT["en"]["log_added"]
     assert "导出失败" in GUI_TEXT["zh"]["log_export_failed"]
     assert "Export failed" in GUI_TEXT["en"]["log_export_failed"]
+    assert "{failed}" in GUI_TEXT["zh"]["log_export_done"]
+    assert "{warnings}" in GUI_TEXT["en"]["log_export_done"]
 
 
 def test_gui_exposes_minimal_workbench_theme_contract() -> None:
