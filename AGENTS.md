@@ -516,6 +516,46 @@ If such a change is required, the change entry must include:
 
 ## Recent Change Log for Agents
 
+### 2026-07-12 — Fix Publication Figure Overwrite Confirmation
+
+- **Agent / Author**: Codex
+- **Branch / Commit**: `main` / not committed at time of entry
+- **Files Changed**: `src/cif2peaks/gui.py`, `tests/test_cif2peaks.py`, `AGENTS.md`
+- **Change Type**:
+  - [x] Bug fix
+  - [ ] Refactor
+  - [x] GUI change
+  - [ ] Data processing change
+  - [ ] Export / reporting change
+  - [ ] Dependency / config change
+  - [ ] Documentation only
+- **What Changed**: Made multi-output overwrite confirmation resolve each
+  planned path without forcing a `.xlsx` suffix, and added a regression test
+  for an existing publication SVG sidecar.
+- **Why It Changed**: Publication sidecars were planned with `.svg`, `.pdf`,
+  `.eps`, `.png`, and `.tif` suffixes, but the confirmation helper converted
+  them to `.xlsx` before checking existence; an existing figure could therefore
+  be overwritten without a confirmation prompt.
+- **Impact Scope**: GUI pre-export overwrite confirmation for workbook,
+  pattern-workbook, and publication-figure outputs. Scientific calculations,
+  export schemas, sheet names, CLI behavior, and figure contents are unchanged.
+- **Risk Level**: Low
+- **Compatibility Notes**: Workbook-only confirmation continues to normalize
+  extensionless GUI output paths to `.xlsx`; multi-output confirmation now
+  preserves the exact planned extension.
+- **Validation Performed**: Added a failing regression test, confirmed the
+  previous implementation failed it, then passed the focused test. The full
+  test file was then covered in safe segments: 109 passed and 5 skipped;
+  compileall, pip check, GUI smoke startup, CLI export smoke, and diff checks
+  also passed.
+- **Known Limitations**: Existing publication sidecars are checked
+  conservatively for every selected CIF before simulation; a failed CIF may
+  still prompt for a sidecar that will not be regenerated.
+- **Rollback Notes**: Revert the path-resolution line in
+  `should_overwrite_gui_outputs()` and its regression assertion.
+- **Follow-up Needed**: None for this fix; manual high-DPI GUI review remains
+  useful before a public Windows release.
+
 ### 2026-06-29 — Improve GUI Result Guidance and Workbook Reading Hints
 
 - **Agent / Author**: Codex

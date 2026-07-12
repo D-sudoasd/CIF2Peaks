@@ -2347,6 +2347,15 @@ def test_gui_defines_tooltips_and_clear_confirmation_contract(tmp_path: Path) ->
     assert (tmp_path / "review_target_02_beta_cif_publication.tif").resolve() in planned_outputs
     assert len(planned_outputs) == 11
 
+    existing_figure = tmp_path / "review_target_01_Alpha_phase_publication.svg"
+    existing_figure.write_text("old figure placeholder", encoding="utf-8")
+    overwrite_calls.clear()
+    assert not should_overwrite_gui_outputs(
+        planned_outputs,
+        lambda path: overwrite_calls.append(path) or False,
+    )
+    assert overwrite_calls == [existing_figure.resolve()]
+
 
 def test_publication_figure_presets_cover_common_export_contexts() -> None:
     from cif2peaks.plotting import FIGURE_EXPORT_PRESETS, PUBLICATION_EXPORT_FORMATS

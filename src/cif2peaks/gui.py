@@ -444,7 +444,7 @@ def should_overwrite_gui_outputs(output_paths: Sequence[str | Path | None], conf
     for output_path in output_paths:
         if output_path is None:
             continue
-        path = normalize_xlsx_output_path(output_path)
+        path = Path(output_path).expanduser().resolve()
         if path in seen:
             continue
         seen.add(path)
