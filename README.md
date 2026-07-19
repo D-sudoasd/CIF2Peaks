@@ -1,68 +1,61 @@
-# CIF2Peaks: a lightweight CIF-to-indexed-powder-diffraction peak table generator for materials research
+<p align="center">
+  <img src="assets/readme/hero.svg" width="100%" alt="CIF2Peaks: CIF to indexed theoretical powder XRD peak tables for materials research.">
+</p>
 
-CIF2Peaks converts CIF crystal structures into indexed theoretical powder XRD
-peak reference tables for materials research.
+# CIF2Peaks
 
-It is designed for materials researchers who need a practical way to batch
-export phase, hkl, d-spacing, 2theta, q, g, relative intensity, and warnings
-into Excel for follow-up work in Excel, Origin, Python, or lab notebooks.
+**CIF → indexed theoretical powder peak tables for Excel, Origin, and Python.**
+
+CIF2Peaks converts CIF crystal structures into batch-exportable peak reference tables: phase, hkl, d-spacing, 2θ, q, g, relative intensity, warnings, and optional hkl-normal Young’s modulus when Cij is available.
 
 ## Features
 
-- Load one CIF file, many CIF files, or a folder of CIF files.
-- Export one combined Excel workbook with:
-  - `Summary`
-  - `Combined Peaks`
-  - `Elastic Constants`
-  - one sheet per phase
-- Use the desktop GUI for non-programming workflows.
-- Drag CIF files or CIF folders directly into the GUI window.
-- Optionally enter per-phase elastic constants (`C11,C12,C44` or a full 6x6
-  `Cij` matrix) and export hkl-normal Young's modulus columns.
-- **PhaseScout bridge:** if a CIF sits next to `{stem}_elasticity.json` (or
-  `elasticity_index.csv` from PhaseScout), Cij is **auto-loaded** (default on).
-  No manual paste required for that workflow.
-- Use the CLI for reproducible batch processing.
-- Choose visible GUI X-ray presets (`Cu Kα`, `30 keV`, `83 keV`) or enter a manual energy.
-- Keep going when one CIF fails; errors and warnings are written to `Summary`.
-- Handles common multi-block CIF files by selecting the structural block.
+- One CIF, many CIFs, or a folder of CIFs
+- Combined Excel workbook: `Summary`, `Combined Peaks`, `Elastic Constants`, one sheet per phase
+- Desktop GUI with drag-and-drop; CLI for reproducible batches
+- X-ray presets (`Cu Kα`, `30 keV`, `83 keV`) or manual energy
+- **PhaseScout bridge:** auto-load `{stem}_elasticity.json` / `elasticity_index.csv` (default on)
+- Continues when one CIF fails; errors land in `Summary`
+- Multi-block CIF: selects the structural block
 
 ## Install
 
-Python 3.11 or newer is required.
+Python **3.11+**:
 
 ```powershell
 cd C:\path\to\CIF2Peaks
 py -3.11 -m pip install -e .[dev]
 ```
 
-## GUI Quick Start
-
-Start the desktop app:
+## GUI quick start
 
 ```powershell
 cif2peaks-gui
+# or: py -3.11 -m cif2peaks.gui
 ```
 
-Or run it from the project folder:
+1. Drag `.cif` files or a folder, or use Add files / Add folder.
+2. Choose X-ray preset or enter manual energy (keV). Manual energy wins when set.
+3. Confirm d-range (Å) and output `.xlsx` path.
+4. Click **Export Excel**.
 
-```powershell
-py -3.11 -m cif2peaks.gui
+### Windows users (no CLI)
+
+```text
+start_cif2peaks.bat
 ```
 
-Basic workflow:
+First run checks Python / Tk and installs dependencies when needed. Drag CIFs onto the bat or into the window. For export-only:
 
-1. Drag `.cif` files or a CIF folder into the window, or click `Add files` / `Add folder`.
-2. Choose an X-ray preset (`Cu Kα`, `30 keV`, `83 keV`) or enter a manual energy in keV.
-3. Confirm the d range in Angstrom and output `.xlsx` path. Leave either d boundary blank to keep it unrestricted.
-4. Click `Export Excel`.
+```text
+quick_export_cif2peaks.bat
+```
 
-Manual energy has priority over the selected preset. Leave the manual energy
-field blank to use the preset.
+Portable build: `build_windows_app.bat` → `dist\CIF2Peaks_Windows_Portable.zip` (no Python on target PC).
 
-## PhaseScout integration (CIF + Cij)
+## PhaseScout integration
 
-PhaseScout downloads write pairs in one folder:
+PhaseScout batch folder:
 
 ```text
 mp-23_Ni_FCC_….cif
@@ -71,244 +64,66 @@ elasticity_index.csv
 Cij_PROVENANCE.txt
 ```
 
-**GUI:** Add folder / drag that directory → phases with valid sidecars show `[Cij]`.  
-**CLI:** auto-elastic is on by default:
+**GUI:** add/drag that directory → phases with valid sidecars show `[Cij]`.  
+**CLI:** auto-elastic on by default:
 
 ```powershell
-cif2peaks "D:\path\to\HEA_…\CIF_Cij_v3" -o hea_peaks.xlsx
+cif2peaks "D:\path\to\batch" -o hea_peaks.xlsx
 # disable:  cif2peaks ... --no-auto-elastic
 ```
 
-### Multiphase pairing (how CIF finds its JSON)
+### Multiphase pairing (CIF → JSON)
 
 | Priority | Rule |
 |----------|------|
 | 1 | Same folder `{exact_cif_stem}_elasticity.json` |
-| 2 | Any `*_elasticity.json` whose `cif_filename` / `paired_cif` equals the CIF name |
-| 3 | Unique `material_id` (`mp-####`) appearing in the CIF filename |
+| 2 | Any `*_elasticity.json` whose `cif_filename` / `paired_cif` matches |
+| 3 | Unique `material_id` (`mp-####`) in the CIF name |
 | 4 | `elasticity_index.csv` row for that CIF name |
 
-Dragging many CIFs **and** JSONs together is fine: only `.cif` files become phases;
-JSONs are not listed, but disk sidecars still bind **per stem** (no cross-phase mix-up).
-Prefer **dragging the whole PhaseScout batch folder**.
+Prefer dragging the **whole** PhaseScout batch folder. Literature-only web packs are **not** loaded as numerical Cij. Loaded tensors use `materials_project_ieee_conventional`; check provenance for non-cubic phases. Invalid tensors leave moduli blank; peaks still export.
 
-Loaded tensors use coordinate frame label `materials_project_ieee_conventional`
-(MP IEEE + conventional cell CIF). Cubic/high-symmetry cases are usually fine;
-always check provenance for non-cubic phases. Literature-only web packs are
-**not** loaded as numerical Cij. Some MP tensors may fail positive-definite checks
-(`invalid_elastic_constants`) — peaks still export; moduli stay blank.
-
-## CLI Examples
-
-Export all CIF files in a folder:
+## CLI examples
 
 ```powershell
 cif2peaks "C:\path\to\cif_folder" -o result.xlsx
-```
-
-Export several CIF files:
-
-```powershell
-cif2peaks phase1.cif phase2.cif phase3.cif -o result.xlsx
-```
-
-Use a custom X-ray energy:
-
-```powershell
+cif2peaks phase1.cif phase2.cif -o result.xlsx
 cif2peaks "C:\path\to\cif_folder" -o result.xlsx --energy-keV 20
-```
-
-Use a custom wavelength:
-
-```powershell
 cif2peaks "C:\path\to\cif_folder" -o result.xlsx --wavelength-A 1.5406
-```
-
-Limit the 2theta range:
-
-```powershell
 cif2peaks "C:\path\to\cif_folder" -o result.xlsx --source "Cu Ka" --two-theta-min 20 --two-theta-max 100
-```
-
-Export CSV instead of Excel:
-
-```powershell
 cif2peaks "C:\path\to\cif_folder" -o result.csv
 ```
 
-## Output Columns
+## Output columns (peak tables)
 
-The peak tables include:
+Include among others: `phase_name`, `cif_name`, `formula`, `space_group`, `hkl`, `d_A`, `two_theta_current_deg`, `relative_intensity`, material scattering factors `R_hkl` (with/without LP), multiplicity/family fields, `q`/`g`, density/cell metadata, `warnings`, and when elastic data load: `young_modulus_hkl_normal_GPa`, `elastic_status`, family modulus notes.
 
-- `phase_name`
-- `cif_name`
-- `formula`
-- `space_group`
-- `hkl`
-- `d_A`
-- `two_theta_current_deg`
-- `relative_intensity`
-- `material_scattering_factor_R_hkl`
-- `material_scattering_factor_R_hkl_no_lp`
-- `inverse_material_scattering_factor_1_over_R_hkl`
-- `inverse_material_scattering_factor_1_over_R_hkl_no_lp`
-- `phase_relative_R_hkl_pct`
-- `phase_relative_R_hkl_no_lp_pct`
-- `phase_peak_rank_by_R_hkl`
-- `phase_peak_rank_by_R_hkl_no_lp`
-- `phase_peak_rank_by_relative_intensity`
-- `coincident_hkl_family_count`
-- `is_multi_family_peak`
-- `mean_structure_factor_sq_per_multiplicity`
-- `mean_structure_factor_abs_per_multiplicity`
-- `sin_theta`
-- `cos_theta`
-- `sin_theta_over_lambda_1_over_A`
-- `sin2_theta_over_lambda2_1_over_A2`
-- `phase_density_g_cm3`
-- `phase_formula_weight_g_mol`
-- `phase_cell_volume_A3`
-- `theoretical_intensity_unscaled`
-- `cell_volume_A3`
-- `lp_factor`
-- `multiplicity_structure_factor_sq`
-- `r_hkl_model_note`
-- `multiplicity`
-- `family_label`
-- `h`, `k`, `l`
-- `g_1_over_A`
-- `q_1_over_A`
-- `theta_deg`
-- `two_theta_cu_ka_deg`
-- `warnings`
-- `young_modulus_hkl_normal_GPa`
-- `elastic_status`
-- `elastic_warning`
-- `elastic_hkl_used`
-- `elastic_family_count`
-- `elastic_family_moduli_GPa`
-- `elastic_modulus_note`
+## Scientific scope
 
-## Scientific Scope
+Theoretical powder XRD peak **references** from CIF structures — not experimental fitting, not Rietveld, not a phase-ID database, not instrument calibration.
 
-CIF2Peaks exports theoretical powder XRD peak references from CIF structures.
-For direct comparison phase-fraction workflows, CIF2Peaks also exports a
-per-peak material scattering factor:
+Material scattering factors for phase-fraction style workflows:
 
 ```text
 R_hkl_with_LP = I_unscaled / V_cell^2
-R_hkl_no_LP = (I_unscaled / LP) / V_cell^2
+R_hkl_no_LP   = (I_unscaled / LP) / V_cell^2
 I_unscaled ≈ p_hkl |F_hkl|^2 LP
 ```
 
-Here `I_unscaled` comes from `pymatgen`'s unscaled theoretical powder
-intensity, `V_cell` is the CIF/Pymatgen unit-cell volume, `p_hkl` is the
-multiplicity term, and `LP` is the Lorentz-polarization factor. If no reliable
-temperature-factor data are supplied, CIF2Peaks assumes `e^-2M = 1`.
-Experimental absorption, detector geometry, and synchrotron polarization
-corrections are not included.
+- Use with-LP `R` for uncorrected experimental areas (pymatgen convention).
+- Use no-LP `R` when pyFAI (or equivalent) already removed LP/geometry terms.
+- If the reduction record does not prove LP handling, do not quantify phase fractions until logs are checked.
+- Default temperature factor: `e^-2M = 1` when no reliable data; absorption, detector geometry, and synchrotron polarization are **not** included.
+- Cij-based `young_modulus_hkl_normal_GPa` uses the supplied stiffness matrix and CIF lattice-derived plane normals — not an experimental modulus.
 
-Use `material_scattering_factor_R_hkl` for uncorrected experimental peak
-areas, or when you need the same with-LP convention as pymatgen's theoretical
-powder pattern. Use `material_scattering_factor_R_hkl_no_lp` for pyFAI or an
-equivalent workflow where the integrated peak area has already been corrected
-for LP/polarization/geometry terms. If the experimental reduction record does
-not prove whether LP was removed, do not use either column for phase-fraction
-quantification until the pyFAI configuration and integration log are checked.
-
-In Excel, an experimental integrated peak intensity `I_exp,j` can be corrected
-as `I_exp,j / R_j`, using the R column that matches the experimental correction
-state. Average those corrected values over the chosen peaks for each phase,
-then use the phase averages to estimate volume fractions, for example
-`f_B2 = S_B2 / (S_B2 + S_gamma)`. These `R_hkl` columns are not Rietveld
-refinement residuals such as `Rp`, `Rwp`, or `Rexp`.
-CIF2Peaks also repeats phase density, formula weight, and related Bragg
-variables in the peak table so users can filter and copy theoretical factors
-without joining additional sheets. These reference columns do not include
-absorption, preferred orientation, microabsorption, experimental instrument
-geometry, experimental peak-integration error, or Rietveld residual corrections.
-
-When Cij values are supplied, `young_modulus_hkl_normal_GPa` is calculated
-from the user-provided stiffness matrix and the CIF lattice-derived hkl plane
-normal. It is not an experimental modulus and is not inferred from the CIF
-alone.
-For four-index Miller-Bravais plane labels, the elastic calculation only uses
-valid plane indices satisfying `i = -(h + k)` and reports the three-index
-`elastic_hkl_used`. If one simulated powder peak contains multiple hkl
-families, the primary modulus follows the representative hkl and
-`elastic_family_moduli_GPa` lists the family-level values.
-The default Cij coordinate-frame assumption is
-`crystal_cartesian_from_cif_lattice`; CIF2Peaks does not rotate literature Cij
-matrices between alternate crystallographic settings.
-
-It is not:
-
-- an experimental pattern fitting program
-- a phase identification database
-- a Rietveld refinement tool
-- a replacement for instrument calibration
-
-For phase and peak-position comparison, prioritize `phase_name`, `hkl`, `d_A`,
-and `two_theta_current_deg`. Treat relative intensity as a theoretical
-reference, not as a refined experimental quantity.
-
-## Windows 普通用户
-
-推荐把整个项目文件夹放在一个固定位置，然后双击：
-
-```text
-start_cif2peaks.bat
-```
-
-首次运行时，脚本会自动检查 Python、修正 Tk/Tcl 路径，并尝试安装所需依赖。
-打开 GUI 后，普通用户只需要：
-
-1. 把 `.cif` 文件或包含 CIF 的文件夹直接拖入窗口，或点击 `添加文件` / `添加文件夹`。
-2. 选择 X 射线预设（`Cu Kα`、`30 keV`、`83 keV`），必要时填写手动能量 keV。
-3. 确认自动生成的 Excel 保存位置和 d 范围（Å）；任一边界留空表示不限制。
-4. 点击 `导出 Excel`。
-
-默认参数为 Cu Kα、d 范围不限制。手动能量非空时优先生效；留空则使用所选预设。
-
-也可以把一个或多个 `.cif` 文件，或包含 CIF 的文件夹，直接拖到
-`start_cif2peaks.bat` 上。GUI 会自动载入这些 CIF，并自动建议 Excel 保存位置。
-打开 GUI 后，也可以继续把 CIF 文件或文件夹拖入窗口追加加载；程序会自动去重并忽略非 CIF 文件。
-
-如果只想直接得到 Excel，不需要打开 GUI，可以把 `.cif` 文件或 CIF 文件夹拖到：
-
-```text
-quick_export_cif2peaks.bat
-```
-
-它会使用默认 Cu Kα、2θ 0-180°，并把结果保存到第一个 CIF 所在文件夹。
-
-导出的 Excel 会默认打开 `使用说明` 工作表，普通用户先看这里即可。
-最常用峰表在 `推荐峰表`，使用中文列名；完整英文列名峰表保留在 `Combined Peaks`，便于程序读取。
-如果 CIF 无法解析，程序仍会生成 Excel 诊断文件；请查看 `Summary` 中的错误提示。
-
-如果需要把程序发给没有 Python 环境的 Windows 电脑，先在开发电脑上双击：
-
-```text
-build_windows_app.bat
-```
-
-打包成功后，优先把 `dist\CIF2Peaks_Windows_Portable.zip` 发给目标电脑。
-目标电脑解压后进入 `CIF2Peaks` 文件夹，先双击 `windows_self_test.bat`。
-目标电脑不需要安装 Python。
-
-在目标电脑上：
-
-- 双击 `CIF2Peaks.exe` 打开 GUI。
-- 把 CIF 文件或文件夹拖到 `CIF2Peaks.exe` 上，会自动载入 GUI。
-- 把 CIF 文件或文件夹拖到 `CIF2Peaks Quick Export.exe` 上，会直接导出 Excel。
+Prioritize `phase_name`, `hkl`, `d_A`, and `two_theta_current_deg` for peak-position work; treat relative intensity as theoretical only.
 
 ## Tests
 
 ```powershell
-cd C:\path\to\CIF2Peaks
 py -3.11 -m pytest -q
 ```
 
 ## License
 
-MIT License. See [LICENSE](LICENSE).
+MIT — see [LICENSE](LICENSE).

@@ -1,0 +1,29 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="340" viewBox="0 0 1200 340" role="img" aria-labelledby="title desc">
+  <title id="title">CIF2Peaks</title>
+  <desc id="desc">Convert CIF crystal structures into indexed theoretical powder XRD peak tables for Excel, Origin, and Python.</desc>
+  <rect width="1200" height="340" rx="28" fill="#0f1419"/>
+  <g font-family="-apple-system, BlinkMacSystemFont, Segoe UI, sans-serif">
+    <text x="56" y="72" fill="#34d399" font-size="18" font-weight="700" letter-spacing="2">CIF → INDEXED POWDER PEAKS</text>
+    <text x="56" y="130" fill="#f8fafc" font-size="48" font-weight="800">CIF2Peaks</text>
+    <text x="56" y="176" fill="#94a3b8" font-size="22">Batch theoretical peak tables for materials research.</text>
+    <text x="56" y="218" fill="#64748b" font-size="18">hkl · d · 2θ · q · g · relative I · optional E(hkl)</text>
+    <text x="56" y="270" fill="#6ee7b7" font-size="16">PhaseScout bridge · auto-load Cij sidecars</text>
+  </g>
+  <g transform="translate(680 48)" font-family="ui-monospace, SFMono-Regular, Menlo, monospace">
+    <rect width="460" height="244" rx="16" fill="#111827" stroke="#14532d" stroke-width="2"/>
+    <rect width="460" height="40" fill="#14532d" rx="16"/>
+    <rect y="24" width="460" height="16" fill="#14532d"/>
+    <text x="16" y="28" fill="#bbf7d0" font-size="14">hkl</text>
+    <text x="90" y="28" fill="#bbf7d0" font-size="14">d (Å)</text>
+    <text x="180" y="28" fill="#bbf7d0" font-size="14">2θ°</text>
+    <text x="270" y="28" fill="#bbf7d0" font-size="14">I_rel</text>
+    <text x="360" y="28" fill="#bbf7d0" font-size="14">E_hkl</text>
+    <g fill="#e2e8f0" font-size="15">
+      <text x="16" y="72">111</text><text x="90" y="72">2.340</text><text x="180" y="72">38.4</text><text x="270" y="72">100</text><text x="360" y="72">210</text>
+      <text x="16" y="112">200</text><text x="90" y="112">2.027</text><text x="180" y="112">44.5</text><text x="270" y="112">48</text><text x="360" y="112">198</text>
+      <text x="16" y="152">220</text><text x="90" y="152">1.433</text><text x="180" y="152">64.6</text><text x="270" y="152">32</text><text x="360" y="152">185</text>
+      <text x="16" y="192">311</text><text x="90" y="192">1.222</text><text x="180" y="192">77.6</text><text x="270" y="192">28</text><text x="360" y="192">172</text>
+    </g>
+    <text x="16" y="230" fill="#64748b" font-size="13">Excel: Summary · Combined Peaks · Elastic Constants</text>
+  </g>
+</svg>
