@@ -2777,3 +2777,111 @@ def test_simple_gui_export_filters_by_d_range_and_records_summary(tmp_path: Path
     assert summary["d_max_A"] == "2"
     assert float(summary["two_theta_min_deg"]) > 0.0
     assert float(summary["two_theta_max_deg"]) < 180.0
+
+
+def _phasescout_elasticity_payload() -> dict:
+    # Simple cubic-like positive-definite matrix (GPa)
+    c11, c12, c44 = 250.0, 150.0, 100.0
+    m = [[0.0] * 6 for _ in range(6)]
+    for i in range(3):
+        m[i][i] = c11
+        for j in range(3):
+            if i != j:
+                m[i][j] = c12
+    for i in range(3, 6):
+        m[i][i] = c44
+    return {
+        "material_id": "mp-test",
+        "status": "ok",
+        "cij_basis": "ieee_format",
+        "elastic_tensor": {"ieee_format": m, "raw": m},
+        "provenance": {
+            "provider": "Materials Project",
+            "nature_of_data": "DFT_calculated",
+            "numerical_cij": True,
+            "methodology_url": "https://docs.materialsproject.org/methodology/materials-methodology/elasticity",
+            "not_experimental": True,
+        },
+        "cif2peaks": {
+            "schema": "phasescout_elasticity_v1",
+            "stiffness_GPa": m,
+            "coordinate_frame": "materials_project_ieee_conventional",
+        },
+    }
+
+
+def test_load_elastic_for_cif_from_phasescout_sidecar(tmp_path: Path) -> None:
+    from cif2peaks.elastic_io import load_elastic_for_cif
+
+    cif = tmp_path / "demo_phase.cif"
+    cif.write_text(TI_BETA_CIF.read_text(encoding="utf-8"), encoding="utf-8")
+    sidecar = tmp_path / "demo_phase_elasticity.json"
+    sidecar.write_text(json.dumps(_phasescout_elasticity_payload()), encoding="utf-8")
+
+    elastic = load_elastic_for_cif(cif)
+    assert elastic is not None
+    assert elastic.status in {"valid", "valid_with_warnings"}
+    assert "PhaseScout" in elastic.source
+    assert elastic.coordinate_frame == "materials_project_ieee_conventional"
+    assert elastic.stiffness_matrix_GPa[0, 0] == pytest.approx(250.0)
+
+
+def test_load_elastic_skips_non_ok_status(tmp_path: Path) -> None:
+    from cif2peaks.elastic_io import load_elastic_for_cif
+
+    cif = tmp_path / "missing.cif"
+    cif.write_text(TI_BETA_CIF.read_text(encoding="utf-8"), encoding="utf-8")
+    payload = _phasescout_elasticity_payload()
+    payload["status"] = "no_elasticity_data"
+    payload["provenance"]["numerical_cij"] = False
+    (tmp_path / "missing_elasticity.json").write_text(json.dumps(payload), encoding="utf-8")
+    assert load_elastic_for_cif(cif) is None
+
+
+def test_service_auto_loads_phasescout_elastic_sidecar(tmp_path: Path) -> None:
+    cif = tmp_path / "auto_phase.cif"
+    cif.write_text(TI_BETA_CIF.read_text(encoding="utf-8"), encoding="utf-8")
+    (tmp_path / "auto_phase_elasticity.json").write_text(
+        json.dumps(_phasescout_elasticity_payload()), encoding="utf-8"
+    )
+    service = Cif2PeaksService()
+    phase = service.load_phase(cif, auto_elastic=True)
+    assert phase.elastic_constants is not None
+    assert "PhaseScout" in phase.elastic_constants.source
+
+    phase_off = service.load_phase(cif, auto_elastic=False)
+    assert phase_off.elastic_constants is None
+
+
+def test_combined_peaks_use_auto_loaded_phasescout_cij(tmp_path: Path) -> None:
+    cif = tmp_path / "mod_phase.cif"
+    cif.write_text(TI_BETA_CIF.read_text(encoding="utf-8"), encoding="utf-8")
+    (tmp_path / "mod_phase_elasticity.json").write_text(
+        json.dumps(_phasescout_elasticity_payload()), encoding="utf-8"
+    )
+    service = Cif2PeaksService()
+    phase = service.load_phase(cif)
+    service.simulate_phase(phase, Cif2PeaksSettings())
+    rows = combined_peak_rows([phase])
+    assert rows
+    assert rows[0]["young_modulus_hkl_normal_GPa"] != ""
+    assert float(rows[0]["young_modulus_hkl_normal_GPa"]) > 0.0
+    assert "PhaseScout" in (phase.elastic_constants.source if phase.elastic_constants else "")
+
+
+def test_load_elastic_matches_paired_cif_after_rename(tmp_path: Path) -> None:
+    """CIF renamed but JSON still records original paired_cif / material_id."""
+    from cif2peaks.elastic_io import load_elastic_for_cif
+
+    payload = _phasescout_elasticity_payload()
+    payload["material_id"] = "mp-150"
+    payload["cif_filename"] = "mp-150_Fe_FCC.cif"
+    payload["provenance"]["material_id"] = "mp-150"
+    (tmp_path / "other_stem_elasticity.json").write_text(json.dumps(payload), encoding="utf-8")
+
+    # Rename: stem differs from JSON filename, but material_id is in CIF name
+    cif = tmp_path / "mp-150_renamed_copy.cif"
+    cif.write_text(TI_BETA_CIF.read_text(encoding="utf-8"), encoding="utf-8")
+    elastic = load_elastic_for_cif(cif)
+    assert elastic is not None
+    assert elastic.stiffness_matrix_GPa[0, 0] == pytest.approx(250.0)

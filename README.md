@@ -19,6 +19,9 @@ into Excel for follow-up work in Excel, Origin, Python, or lab notebooks.
 - Drag CIF files or CIF folders directly into the GUI window.
 - Optionally enter per-phase elastic constants (`C11,C12,C44` or a full 6x6
   `Cij` matrix) and export hkl-normal Young's modulus columns.
+- **PhaseScout bridge:** if a CIF sits next to `{stem}_elasticity.json` (or
+  `elasticity_index.csv` from PhaseScout), Cij is **auto-loaded** (default on).
+  No manual paste required for that workflow.
 - Use the CLI for reproducible batch processing.
 - Choose visible GUI X-ray presets (`Cu Kα`, `30 keV`, `83 keV`) or enter a manual energy.
 - Keep going when one CIF fails; errors and warnings are written to `Summary`.
@@ -56,6 +59,44 @@ Basic workflow:
 
 Manual energy has priority over the selected preset. Leave the manual energy
 field blank to use the preset.
+
+## PhaseScout integration (CIF + Cij)
+
+PhaseScout downloads write pairs in one folder:
+
+```text
+mp-23_Ni_FCC_….cif
+mp-23_Ni_FCC_…_elasticity.json
+elasticity_index.csv
+Cij_PROVENANCE.txt
+```
+
+**GUI:** Add folder / drag that directory → phases with valid sidecars show `[Cij]`.  
+**CLI:** auto-elastic is on by default:
+
+```powershell
+cif2peaks "D:\path\to\HEA_…\CIF_Cij_v3" -o hea_peaks.xlsx
+# disable:  cif2peaks ... --no-auto-elastic
+```
+
+### Multiphase pairing (how CIF finds its JSON)
+
+| Priority | Rule |
+|----------|------|
+| 1 | Same folder `{exact_cif_stem}_elasticity.json` |
+| 2 | Any `*_elasticity.json` whose `cif_filename` / `paired_cif` equals the CIF name |
+| 3 | Unique `material_id` (`mp-####`) appearing in the CIF filename |
+| 4 | `elasticity_index.csv` row for that CIF name |
+
+Dragging many CIFs **and** JSONs together is fine: only `.cif` files become phases;
+JSONs are not listed, but disk sidecars still bind **per stem** (no cross-phase mix-up).
+Prefer **dragging the whole PhaseScout batch folder**.
+
+Loaded tensors use coordinate frame label `materials_project_ieee_conventional`
+(MP IEEE + conventional cell CIF). Cubic/high-symmetry cases are usually fine;
+always check provenance for non-cubic phases. Literature-only web packs are
+**not** loaded as numerical Cij. Some MP tensors may fail positive-definite checks
+(`invalid_elastic_constants`) — peaks still export; moduli stay blank.
 
 ## CLI Examples
 
