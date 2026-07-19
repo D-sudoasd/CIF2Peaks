@@ -10,6 +10,8 @@ from .hkl import plane_hkl_for_normal
 
 ElasticStatus = str
 DEFAULT_ELASTIC_COORDINATE_FRAME = "crystal_cartesian_from_cif_lattice"
+# PhaseScout / Materials Project IEEE tensors with conventional-cell CIFs
+MATERIALS_PROJECT_IEEE_CONVENTIONAL_FRAME = "materials_project_ieee_conventional"
 
 
 def _as_stiffness_matrix(values: Iterable[Iterable[object]]) -> np.ndarray:

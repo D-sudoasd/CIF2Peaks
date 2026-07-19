@@ -59,6 +59,7 @@ def batch_export_peak_reference(
     export_peaks: bool = True,
     export_patterns: bool = False,
     pattern_axis: XrdAxisMode = "two_theta",
+    auto_elastic: bool = True,
 ) -> list:
     if not export_peaks and not export_patterns:
         raise ValueError("At least one export type must be enabled.")
@@ -69,7 +70,7 @@ def batch_export_peak_reference(
 
     service = Cif2PeaksService()
     resolved_settings = settings or Cif2PeaksSettings()
-    phases = service.load_phases(cif_paths)
+    phases = service.load_phases(cif_paths, auto_elastic=auto_elastic)
     service.simulate_phases(phases, resolved_settings)
     payload = Cif2PeaksExportPayload(phases, resolved_settings)
 
@@ -120,6 +121,19 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument("--no-export-peaks", dest="export_peaks", action="store_false", help="Do not export peak reference table.")
     parser.add_argument("--export-patterns", action="store_true", help="Export continuous simulated XRD pattern workbook.")
     parser.add_argument("--pattern-axis", choices=("two_theta", "d_spacing", "q", "g"), default="two_theta", help="X axis for pattern workbook.")
+    parser.add_argument(
+        "--auto-elastic",
+        dest="auto_elastic",
+        action="store_true",
+        default=True,
+        help="Auto-load PhaseScout *_elasticity.json / elasticity_index.csv next to CIFs (default: on).",
+    )
+    parser.add_argument(
+        "--no-auto-elastic",
+        dest="auto_elastic",
+        action="store_false",
+        help="Do not auto-load PhaseScout elasticity sidecars.",
+    )
     args = parser.parse_args(argv)
 
     settings = _settings_from_args(args)
@@ -131,12 +145,16 @@ def main(argv: Sequence[str] | None = None) -> int:
         export_peaks=args.export_peaks,
         export_patterns=args.export_patterns,
         pattern_axis=args.pattern_axis,
+        auto_elastic=args.auto_elastic,
     )
     peak_count = sum(0 if phase.result is None else len(phase.result.peaks) for phase in phases)
+    elastic_n = sum(1 for phase in phases if phase.elastic_constants is not None)
     failed = [phase.cif_path.name for phase in phases if phase.error]
     peak_output, pattern_output = export_output_paths(args.output, export_peaks=args.export_peaks, export_patterns=args.export_patterns)
     outputs = "; ".join(str(path) for path in (peak_output, pattern_output) if path is not None)
     print(f"Exported {peak_count} peaks from {len(phases)} CIF files to {outputs}")
+    if args.auto_elastic:
+        print(f"Auto-loaded elastic constants for {elastic_n}/{len(phases)} phase(s) (PhaseScout sidecars).")
     if failed:
         print("Failed CIF files: " + ", ".join(failed))
     return 0 if peak_count else 1

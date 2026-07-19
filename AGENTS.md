@@ -97,6 +97,9 @@ Typical use cases:
 - `src/cif2peaks/elastic.py`
   - Elastic stiffness matrix validation and hkl-normal Young's modulus
     calculation from user-provided Cij values.
+- `src/cif2peaks/elastic_io.py`
+  - Auto-load PhaseScout `*_elasticity.json` / `elasticity_index.csv` sidecars
+    next to CIFs (`load_elastic_for_cif`). Default on in service/GUI/CLI.
 - `src/cif2peaks/exporters.py`
   - Hand-written CSV, JSON, XLSX, peak workbook, pattern workbook, sheet names,
     headers, styles, user-guide sheet, and beginner Chinese peak table.

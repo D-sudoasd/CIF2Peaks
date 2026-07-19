@@ -14,6 +14,7 @@ import numpy as np
 from .batch import export_output_paths
 from .constants import DEFAULT_XRD_SOURCE, X_RAY_ENERGY_WAVELENGTH_KEV_A
 from .elastic import ElasticConstants
+from .elastic_io import load_elastic_for_cif
 from .exporters import export_cif2peaks_pattern_workbook, export_cif2peaks_workbook
 from .models import Cif2PeaksExportPayload, Cif2PeaksSettings, XrdAxisMode
 from .plotting import (
@@ -158,6 +159,7 @@ GUI_TEXT = {
         "elastic_status_with_warning": "Cij 状态：{status} - {warning}",
         "elastic_status_input_error": "Cij 输入错误：{warning}",
         "elastic_status_ready_to_apply": "已填入 Cij，点击“应用 Cij”保存到当前相。",
+        "elastic_auto_loaded": "已从 PhaseScout 旁路自动加载 Cij：{count} 个相。",
         "elastic_copied": "已复制 Cij 表格。",
         "add_files": "添加 CIF",
         "add_folder": "添加文件夹",
@@ -192,8 +194,8 @@ GUI_TEXT = {
         "recognized_with_failures": "已识别 {ready} 个 CIF；{failed} 个无法读取，仍可导出其它可用文件。",
         "recognized_ready": "已识别 {ready} 个 CIF：确认保存位置和图像选项后点击“导出结果”。",
         "add_source": "{source}：新增 {added} 个 CIF{suffix}。",
-        "add_source_none": "{source}：没有新增 CIF，已忽略 {ignored} 项。",
-        "ignored_suffix": "，忽略 {ignored} 项",
+        "add_source_none": "{source}：没有新增 CIF，已忽略 {ignored} 项（JSON 等非 CIF 不会进列表；同目录旁路仍可自动匹配 Cij）。",
+        "ignored_suffix": "，忽略 {ignored} 项非 CIF/重复项",
         "source_add_files": "添加文件",
         "source_add_folder": "添加文件夹",
         "source_drop": "拖入文件",
@@ -292,6 +294,7 @@ GUI_TEXT = {
         "elastic_status_with_warning": "Cij status: {status} - {warning}",
         "elastic_status_input_error": "Cij input error: {warning}",
         "elastic_status_ready_to_apply": "Cij table filled. Click Apply Cij to save it to the selected phase.",
+        "elastic_auto_loaded": "Auto-loaded PhaseScout Cij sidecars for {count} phase(s).",
         "elastic_copied": "Copied the Cij table.",
         "add_files": "Add CIFs",
         "add_folder": "Add folder",
@@ -326,8 +329,8 @@ GUI_TEXT = {
         "recognized_with_failures": "Recognized {ready} CIF file(s); {failed} could not be read, but usable files can still be exported.",
         "recognized_ready": "Recognized {ready} CIF file(s): confirm the output path and figure options, then click Export results.",
         "add_source": "{source}: added {added} CIF file(s){suffix}.",
-        "add_source_none": "{source}: no new CIF files; ignored {ignored} item(s).",
-        "ignored_suffix": ", ignored {ignored} item(s)",
+        "add_source_none": "{source}: no new CIF files; ignored {ignored} item(s) (non-CIF such as JSON are not listed; same-folder sidecars still auto-match Cij).",
+        "ignored_suffix": ", ignored {ignored} non-CIF/duplicate item(s)",
         "source_add_files": "Add files",
         "source_add_folder": "Add folder",
         "source_drop": "Drop",
@@ -1698,14 +1701,26 @@ def _launch_tk_app(initial_paths: Sequence[str | Path] = ()) -> None:
         schedule_preview()
 
     def add_inputs(inputs: Sequence[str | Path], source_label: str) -> GuiCifInputUpdate:
+        before = set(selected_paths)
         update = add_gui_cif_inputs(selected_paths, inputs)
+        auto_elastic_n = 0
         for path in selected_paths:
             display_names.setdefault(path, path.name)
+            # Auto-load PhaseScout sidecars for newly added CIFs only; do not override manual Cij.
+            if path not in before and path not in elastic_constants:
+                elastic = load_elastic_for_cif(path)
+                if elastic is not None:
+                    elastic_constants[path] = elastic
+                    auto_elastic_n += 1
         refresh_list()
         if update.added_count:
             suffix = _gui_text(lang(), "ignored_suffix", ignored=update.ignored_count) if update.ignored_count else ""
             status_var.set(_gui_text(lang(), "add_source", source=source_label, added=update.added_count, suffix=suffix))
             append_activity(_gui_text(lang(), "log_added", source=source_label, added=update.added_count, suffix=suffix))
+            if auto_elastic_n:
+                msg = _gui_text(lang(), "elastic_auto_loaded", count=auto_elastic_n)
+                append_activity(msg)
+                status_var.set(msg)
         elif update.ignored_count:
             status_var.set(_gui_text(lang(), "add_source_none", source=source_label, ignored=update.ignored_count))
             append_activity(_gui_text(lang(), "log_add_none", source=source_label, ignored=update.ignored_count))

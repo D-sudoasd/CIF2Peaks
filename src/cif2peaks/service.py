@@ -6,6 +6,7 @@ from pathlib import Path
 import numpy as np
 
 from .constants import DEFAULT_XRD_WAVELENGTH_A
+from .elastic_io import load_elastic_for_cif
 from .hkl import split_hkl_components
 from .models import XRDPeakRecord, XRDRequest, Cif2PeaksPeakRow, Cif2PeaksSettings, XrdPhase
 from .structure import load_crystal_model
@@ -22,21 +23,28 @@ class Cif2PeaksService:
     def __init__(self) -> None:
         self.xrd_service = XRDService()
 
-    def load_phase(self, cif_path: str | Path) -> XrdPhase:
+    def load_phase(self, cif_path: str | Path, *, auto_elastic: bool = True) -> XrdPhase:
         path = Path(cif_path).expanduser().resolve()
         crystal = load_crystal_model(path)
-        return XrdPhase(
+        phase = XrdPhase(
             cif_path=path,
             phase_name=path.stem,
             crystal=crystal,
         )
+        if auto_elastic:
+            elastic = load_elastic_for_cif(path)
+            if elastic is not None:
+                phase.elastic_constants = elastic
+        return phase
 
-    def load_phases(self, cif_paths: list[str | Path]) -> list[XrdPhase]:
+    def load_phases(
+        self, cif_paths: list[str | Path], *, auto_elastic: bool = True
+    ) -> list[XrdPhase]:
         phases: list[XrdPhase] = []
         for cif_path in cif_paths:
             path = Path(cif_path).expanduser().resolve()
             try:
-                phases.append(self.load_phase(path))
+                phases.append(self.load_phase(path, auto_elastic=auto_elastic))
             except Exception as exc:
                 phases.append(
                     XrdPhase(
