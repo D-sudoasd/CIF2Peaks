@@ -1178,6 +1178,12 @@ def test_cif2peaks_exports_detected_space_group_and_preserves_cif_space_group(tm
     assert combined_sheet[1][headers.index("space_group_from_cif")] == "P 1"
     assert combined_sheet[1][headers.index("space_group_detected")] == "Pm-3m"
 
+    structure_sheet = _worksheet_rows_by_name(workbook_output, "Structure")
+    structure_headers = structure_sheet[0]
+    assert structure_sheet[1][structure_headers.index("space_group_from_cif")] == "P 1"
+    assert structure_sheet[1][structure_headers.index("space_group_detected")] == "Pm-3m"
+    assert structure_sheet[1][structure_headers.index("space_group_status")] == "mismatch"
+
     summary_rows = _worksheet_rows(workbook_output, 1)
     summary_header_index = next(index for index, row in enumerate(summary_rows) if row and row[0] == "phase_name")
     summary_header = summary_rows[summary_header_index]
@@ -2902,6 +2908,31 @@ def test_load_elastic_matches_paired_cif_after_rename(tmp_path: Path) -> None:
     assert elastic.stiffness_matrix_GPa[0, 0] == pytest.approx(250.0)
 
 
+def test_example_cifs_mark_equivalent_hermann_mauguin_symbols_as_match() -> None:
+    from cif2peaks.workbook_views import space_group_symbols_equivalent, structure_status_rows
+
+    assert space_group_symbols_equivalent("I m 3 m", "Im-3m")
+    assert space_group_symbols_equivalent("P 63/m m c", "P6_3/mmc")
+    assert not space_group_symbols_equivalent("P 1", "Pm-3m")
+
+    service = Cif2PeaksService()
+    phases = [service.load_phase(TI_BETA_CIF), service.load_phase(TI_NB_HCP_CIF)]
+    rows = structure_status_rows(phases)
+    headers = rows[0]
+    status_i = headers.index("space_group_status")
+    cif_i = headers.index("space_group_from_cif")
+    det_i = headers.index("space_group_detected")
+    by_phase = {row[headers.index("phase_name")]: row for row in rows[1:]}
+
+    beta = by_phase["ti_beta_bcc_im3m"]
+    hcp = by_phase["ti_nb_hcp_p63mmc"]
+    assert "m 3 m" in beta[cif_i] or "m3m" in beta[cif_i].replace(" ", "").lower()
+    assert beta[cif_i] != beta[det_i]
+    assert hcp[cif_i] != hcp[det_i]
+    assert beta[status_i] == "match"
+    assert hcp[status_i] == "match"
+
+
 def test_overlap_records_only_pairs_inside_the_stated_window() -> None:
     from cif2peaks.workbook_views import overlap_peak_records
 
@@ -2981,6 +3012,12 @@ def test_workbook_includes_working_structure_and_conditional_overlap(tmp_path: P
     assert ortho[headers.index("occupancy_status")] == "partial"
     assert ortho[headers.index("occupancy_sites")]
     assert by_phase["ti_beta_bcc_im3m"][headers.index("occupancy_status")] == "full"
+    beta = by_phase["ti_beta_bcc_im3m"]
+    hcp = by_phase["ti_nb_hcp_p63mmc"]
+    assert beta[headers.index("space_group_from_cif")] != beta[headers.index("space_group_detected")]
+    assert hcp[headers.index("space_group_from_cif")] != hcp[headers.index("space_group_detected")]
+    assert beta[headers.index("space_group_status")] == "match"
+    assert hcp[headers.index("space_group_status")] == "match"
 
     overlap = _worksheet_rows_by_name(output, "Overlap")
     assert overlap[0][0] == "overlap_rule"

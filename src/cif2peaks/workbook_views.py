@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from typing import Any
 
 from .models import XrdPhase
@@ -60,9 +61,19 @@ OVERLAP_HEADERS = [
 
 
 def _normalized_symbol(symbol: str | None) -> str:
+    """Collapse equivalent Hermann–Mauguin spellings to one token."""
+
     if not symbol:
         return ""
-    return "".join(str(symbol).lower().split())
+    text = str(symbol).casefold()
+    text = re.sub(r"_+", "", text)
+    return re.sub(r"[\s\-/\\]+", "", text)
+
+
+def space_group_symbols_equivalent(left: str | None, right: str | None) -> bool:
+    left_norm = _normalized_symbol(left)
+    right_norm = _normalized_symbol(right)
+    return bool(left_norm) and left_norm == right_norm
 
 
 def working_peak_rows(combined_rows: list[dict[str, Any]]) -> list[list[Any]]:
@@ -89,14 +100,22 @@ def working_peak_rows(combined_rows: list[dict[str, Any]]) -> list[list[Any]]:
 def _space_group_status(crystal) -> str:
     cif_symbol = crystal.validation_report.space_group_from_cif
     detected = crystal.detected_space_group_symbol
+    cif_number = crystal.validation_report.space_group_number_from_cif
+    detected_number = crystal.detected_space_group_number
     cif_norm = _normalized_symbol(cif_symbol)
     detected_norm = _normalized_symbol(detected)
-    if not cif_norm and not detected_norm:
+    if not cif_norm and not detected_norm and cif_number is None and detected_number is None:
         return "unknown"
+    numbers_agree = (
+        cif_number is not None
+        and detected_number is not None
+        and int(cif_number) == int(detected_number)
+        and int(detected_number) > 1
+    )
+    if space_group_symbols_equivalent(cif_symbol, detected) or numbers_agree:
+        return "match"
     if not cif_norm or not detected_norm:
         return "partial"
-    if cif_norm == detected_norm:
-        return "match"
     return "mismatch"
 
 
