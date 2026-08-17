@@ -7,6 +7,7 @@
 **CIF → indexed theoretical powder peak tables for Excel, Origin, and Python.**
 
 Batch-export phase, hkl, d, 2θ, q, g, relative intensity, warnings, and optional hkl-normal Young’s modulus when Cij is available.
+The default Excel opens on **工作峰表** and also writes **Structure** plus, for two or more phases, **Overlap** (stated Δ2θ / Δd window).
 
 <p align="center">
   <img src="assets/readme/section-01-output.svg" width="100%" alt="01 Output: indexed peaks for Excel and Origin.">
