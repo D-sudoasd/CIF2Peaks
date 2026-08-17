@@ -15,6 +15,13 @@ from .hkl import format_hkl, plane_hkl_for_normal
 from .models import ExperimentalPattern, Cif2PeaksExportPayload, Cif2PeaksPeakRow, XrdAxisMode, XrdPhase
 from .service import phase_peak_rows
 from .utils import friendly_cif_issue_message, now_iso, package_versions
+from .workbook_views import (
+    STRUCTURE_HEADERS,
+    WORKING_PEAK_HEADERS,
+    overlap_sheet_rows,
+    structure_status_rows,
+    working_peak_rows,
+)
 
 
 QUANT_PHASE_ANALYSIS_HEADERS = [
@@ -517,7 +524,7 @@ def _summary_rows(payload: Cif2PeaksExportPayload) -> list[list[Any]]:
             "with-LP: uncorrected peak areas or pymatgen-style pattern comparison; no-LP: pyFAI or equivalent corrected integrated intensities",
         ],
         ["R_hkl_scope", "not a Rietveld residual; no experimental absorption, preferred orientation, or peak-integration-error correction"],
-        ["result_reading_order", "先看 使用说明，再看 Summary 检查错误/警告，常用筛选看 推荐峰表，程序读取用 Combined Peaks。"],
+        ["result_reading_order", "先看 工作峰表；结构/占位看 Structure；多相重叠看 Overlap；英文全列看 Combined Peaks。"],
         ["warning_guidance", "error 或 warnings 非空时，先确认 CIF 结构、占位、空间群和导出范围；可用相仍会继续导出。"],
         ["r_hkl_guidance", "R_hkl 不是 Rietveld 残差；含 LP 与 no-LP 口径必须和实验积分强度处理流程一致。"],
         ["elastic_guidance", "young_modulus_hkl_normal_GPa 仅在提供有效 Cij 时可用；no_elastic_constants 表示未输入 Cij。"],
@@ -637,8 +644,8 @@ def _user_guide_rows(payload: Cif2PeaksExportPayload) -> list[list[Any]]:
                 else f"{payload.settings.source_preset}，2θ {payload.settings.two_theta_min_deg:g}-{payload.settings.two_theta_max_deg:g}°"
             ),
         ],
-        ["最快使用", "普通用户先看 推荐峰表；需要英文列名或完整字段时再看 Combined Peaks。"],
-        ["结果阅读顺序", "先看 使用说明 了解表格；再看 Summary 检查每个 CIF 的 error/warnings；常用峰位和强度看 推荐峰表；程序读取或批处理看 Combined Peaks。"],
+        ["最快使用", "打开后默认落在 工作峰表：相、hkl、d、2θ、相对强度、模量状态。结构体检看 Structure；多相叠峰看 Overlap。"],
+        ["结果阅读顺序", "先看 工作峰表；再看 Structure 检查格子/空间群/占位；两个及以上相时看 Overlap；英文全列或批处理看 Combined Peaks。"],
         ["警告处理建议", "Summary 或峰表 warnings 非空时，先确认 CIF 是否完整、占位/空间群是否可信、导出 d 或 2θ 范围是否过窄；其它可用相仍可继续使用。"],
         ["R_hkl 使用边界", "R_hkl 不是 Rietveld 残差或实验拟合优度；含 LP 与 no-LP 口径必须匹配实验积分强度的 LP/几何/偏振校正状态。"],
         ["Cij / 弹性结果", "只有输入有效 Cij 后才会计算 hkl 法向杨氏模量；no_elastic_constants 表示未输入，invalid_elastic_constants 表示 Cij 无法用于模量计算。"],
@@ -647,6 +654,9 @@ def _user_guide_rows(payload: Cif2PeaksExportPayload) -> list[list[Any]]:
         [],
         ["工作表", "内容"],
         ["Summary", "导出参数、每个 CIF 的读取状态、错误和警告。"],
+        ["工作峰表", "精简工作表：相、hkl、d、当前 2θ、相对强度、多重性、提示、hkl 法向杨氏模量和弹性状态。"],
+        ["Structure", "每个 CIF 的晶胞参数、CIF/检测空间群、占位状态与部分占位位点。"],
+        ["Overlap", "两个及以上相时列出 Δ2θ 或 Δd 落在声明窗口内的峰对；窗口写在表头。"],
         ["推荐峰表", "中文列名的常用峰表，适合直接查看、筛选和复制到 Origin。"],
         ["Combined Peaks", "英文列名的完整合并峰表，适合程序读取或后续批处理。"],
         ["各相工作表", "单个 CIF/相的峰表，名称来自 CIF 文件名。"],
@@ -940,6 +950,19 @@ def _table_column_widths(headers: list[Any]) -> list[int]:
         "R因子说明": 64,
         "晶面法向杨氏模量 (GPa)": 24,
         "弹性常数状态": 16,
+        "occupancy_status": 16,
+        "occupancy_summary": 36,
+        "occupancy_sites": 36,
+        "space_group_status": 18,
+        "a_A": 12,
+        "b_A": 12,
+        "c_A": 12,
+        "alpha_deg": 12,
+        "beta_deg": 12,
+        "gamma_deg": 12,
+        "match_by": 14,
+        "phase_a": 22,
+        "phase_b": 22,
     }
     return [default_widths.get(str(header), max(10, min(24, len(str(header)) + 2))) for header in headers]
 
@@ -951,6 +974,8 @@ def _is_table_sheet(rows: list[list[Any]]) -> bool:
     return (
         headers == PEAK_HEADERS
         or headers == BEGINNER_PEAK_HEADERS
+        or headers == WORKING_PEAK_HEADERS
+        or headers == STRUCTURE_HEADERS
         or headers == PATTERN_PROFILE_HEADERS
         or headers == ELASTIC_CONSTANTS_HEADERS
         or headers == ["pattern_label", "source_file", "axis_mode", "x", "relative_intensity"]
@@ -1108,8 +1133,13 @@ def export_cif2peaks_workbook(payload: Cif2PeaksExportPayload, output_path: str 
     used: set[str] = set()
     combined_rows, combined_row_style_ids = _combined_peak_rows_with_phase_styles(payload.phases)
     sheets.append((_safe_sheet_name("Summary", used), _summary_rows(payload), None))
-    sheets.append((_safe_sheet_name("Combined Peaks", used), _peak_rows_for_sheet(combined_rows), combined_row_style_ids))
+    sheets.append((_safe_sheet_name("工作峰表", used), working_peak_rows(combined_rows), combined_row_style_ids))
+    sheets.append((_safe_sheet_name("Structure", used), structure_status_rows(payload.phases), None))
+    overlap_rows = overlap_sheet_rows(combined_rows, payload.phases)
+    if overlap_rows is not None:
+        sheets.append((_safe_sheet_name("Overlap", used), overlap_rows, None))
     sheets.append((_safe_sheet_name("推荐峰表", used), _beginner_peak_rows_for_sheet(combined_rows), combined_row_style_ids))
+    sheets.append((_safe_sheet_name("Combined Peaks", used), _peak_rows_for_sheet(combined_rows), combined_row_style_ids))
     for phase in payload.phases:
         sheets.append((_safe_sheet_name(phase.phase_name, used), _peak_rows_for_sheet(combined_peak_rows([phase])), None))
     sheets.append((_safe_sheet_name("Elastic Constants", used), _elastic_constants_rows_for_sheet(payload.phases), None))
@@ -1158,13 +1188,14 @@ def export_cif2peaks_workbook(payload: Cif2PeaksExportPayload, output_path: str 
         rel_defs.append(
             f'<Relationship Id="rId{style_rel_id}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/>'
         )
+        working_tab = next((index for index, (name, _rows, _styles) in enumerate(sheets) if name == "工作峰表"), 0)
         archive.writestr("xl/styles.xml", _xlsx_styles_xml())
         archive.writestr(
             "xl/workbook.xml",
             '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
             '<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" '
             'xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">'
-            f'<bookViews><workbookView activeTab="{len(sheets) - 1}"/></bookViews>'
+            f'<bookViews><workbookView activeTab="{working_tab}"/></bookViews>'
             f'<sheets>{"".join(sheet_defs)}</sheets></workbook>',
         )
         archive.writestr(

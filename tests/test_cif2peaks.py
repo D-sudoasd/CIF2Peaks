@@ -33,6 +33,7 @@ ROOT = Path(__file__).resolve().parents[1]
 EXAMPLES_CIF_DIR = ROOT / "examples" / "cif"
 TI_BETA_CIF = EXAMPLES_CIF_DIR / "ti_beta_bcc_im3m.cif"
 TI_NB_HCP_CIF = EXAMPLES_CIF_DIR / "ti_nb_hcp_p63mmc.cif"
+TI_NB_ORTHO_CIF = EXAMPLES_CIF_DIR / "ti_nb_orthorhombic_cmcm_partial_occupancy.cif"
 
 NI_OCCUPANCY_CIF = """
 #======================================================================
@@ -767,7 +768,7 @@ def test_hexagonal_hkl_labels_preserve_four_index_notation(tmp_path: Path) -> No
     workbook_output = tmp_path / "hcp_hkl.xlsx"
     export_cif2peaks_workbook(Cif2PeaksExportPayload([phase], settings), workbook_output)
 
-    combined_sheet = _worksheet_rows(workbook_output, 2)
+    combined_sheet = _worksheet_rows_by_name(workbook_output, "Combined Peaks")
     headers = combined_sheet[0]
     assert "i" in headers
     assert combined_sheet[1][headers.index("hkl")] == "(1 0 -1 0)"
@@ -912,7 +913,7 @@ def test_workbook_exports_elastic_columns_and_constants_sheet(tmp_path: Path) ->
 
     sheet_names = _workbook_sheet_names(output)
     assert "Elastic Constants" in sheet_names
-    combined_rows = _worksheet_rows(output, 2)
+    combined_rows = _worksheet_rows_by_name(output, "Combined Peaks")
     headers = combined_rows[0]
     assert "young_modulus_hkl_normal_GPa" in headers
     assert "elastic_status" in headers
@@ -929,7 +930,7 @@ def test_workbook_exports_elastic_columns_and_constants_sheet(tmp_path: Path) ->
     assert by_phase["ti_nb_hcp_p63mmc"][modulus_index] == ""
     assert by_phase["ti_nb_hcp_p63mmc"][status_index] == "no_elastic_constants"
 
-    beginner_rows = _worksheet_rows(output, 3)
+    beginner_rows = _worksheet_rows_by_name(output, "推荐峰表")
     assert "晶面法向杨氏模量 (GPa)" in beginner_rows[0]
     assert "弹性常数状态" in beginner_rows[0]
 
@@ -968,7 +969,7 @@ def test_simple_gui_export_accepts_elastic_constants_for_selected_cifs(tmp_path:
     )
 
     assert result.output_path == output
-    combined_rows = _worksheet_rows(output, 2)
+    combined_rows = _worksheet_rows_by_name(output, "Combined Peaks")
     headers = combined_rows[0]
     assert combined_rows[1][headers.index("elastic_status")] == "valid"
     assert float(combined_rows[1][headers.index("young_modulus_hkl_normal_GPa")]) > 0.0
@@ -1169,7 +1170,7 @@ def test_cif2peaks_exports_detected_space_group_and_preserves_cif_space_group(tm
 
     workbook_output = tmp_path / "space_groups.xlsx"
     export_cif2peaks_workbook(Cif2PeaksExportPayload([phase], settings), workbook_output)
-    combined_sheet = _worksheet_rows(workbook_output, 2)
+    combined_sheet = _worksheet_rows_by_name(workbook_output, "Combined Peaks")
     headers = combined_sheet[0]
     assert "space_group_from_cif" in headers
     assert "space_group_detected" in headers
@@ -1241,7 +1242,7 @@ def test_cif2peaks_batch_export_defaults_to_excel_from_many_cifs(tmp_path: Path)
 
     assert len(phases) == 5
     assert output.exists()
-    headers = _worksheet_rows(output, 2)[0]
+    headers = _worksheet_rows_by_name(output, "Combined Peaks")[0]
     expected_front = [
         "phase_name",
         "cif_name",
@@ -1255,7 +1256,7 @@ def test_cif2peaks_batch_export_defaults_to_excel_from_many_cifs(tmp_path: Path)
         "warnings",
     ]
     assert headers[: len(expected_front)] == expected_front
-    data_rows = _worksheet_rows(output, 2)[1:]
+    data_rows = _worksheet_rows_by_name(output, "Combined Peaks")[1:]
     assert len(data_rows) == sum(len(phase.result.peaks) for phase in phases if phase.result is not None)
     assert all(float(row[5]) > 0 and float(row[6]) > 0 for row in data_rows)
 
@@ -1269,10 +1270,10 @@ def test_cif2peaks_batch_export_zr_hydride_multi_block_cifs(tmp_path: Path) -> N
     assert output.exists()
     assert all(phase.error is None for phase in phases)
     assert all(phase.result is not None and len(phase.result.peaks) > 0 for phase in phases)
-    headers = _worksheet_rows(output, 2)[0]
+    headers = _worksheet_rows_by_name(output, "Combined Peaks")[0]
     for header in ("hkl", "d_A", "two_theta_current_deg", "relative_intensity"):
         assert header in headers
-    data_rows = _worksheet_rows(output, 2)[1:]
+    data_rows = _worksheet_rows_by_name(output, "Combined Peaks")[1:]
     assert len(data_rows) == sum(len(phase.result.peaks) for phase in phases if phase.result is not None)
     assert {row[1] for row in data_rows} == {path.name for path in _zr_hydride_cif_paths()}
     assert all(float(row[5]) > 0 and float(row[6]) > 0 for row in data_rows)
@@ -1427,9 +1428,13 @@ def test_cif2peaks_multi_phase_workbook_export(tmp_path: Path) -> None:
     export_cif2peaks_workbook(Cif2PeaksExportPayload(phases, settings), output)
     with ZipFile(output) as archive:
         workbook = archive.read("xl/workbook.xml").decode("utf-8")
-        combined = archive.read("xl/worksheets/sheet2.xml").decode("utf-8")
+        combined_index = _workbook_sheet_names(output).index("Combined Peaks") + 1
+        combined = archive.read(f"xl/worksheets/sheet{combined_index}.xml").decode("utf-8")
     assert "Summary" in workbook
     assert "Combined Peaks" in workbook
+    assert "工作峰表" in workbook
+    assert "Structure" in workbook
+    assert "Overlap" in workbook
     assert "ti_beta_bcc_im3m" in workbook
     assert "ti_nb_hcp_p63mmc" in workbook
     assert combined.count("<row ") > 2
@@ -1444,16 +1449,19 @@ def test_cif2peaks_workbook_peak_sheets_are_excel_friendly(tmp_path: Path) -> No
 
     export_cif2peaks_workbook(Cif2PeaksExportPayload(phases, settings), output)
 
+    sheet_names = _workbook_sheet_names(output)
+    combined_index = sheet_names.index("Combined Peaks") + 1
+    beginner_index = sheet_names.index("推荐峰表") + 1
     with ZipFile(output) as archive:
-        combined = archive.read("xl/worksheets/sheet2.xml").decode("utf-8")
+        combined = archive.read(f"xl/worksheets/sheet{combined_index}.xml").decode("utf-8")
 
     assert '<pane ySplit="1" topLeftCell="A2"' in combined
     assert '<autoFilter ref="A1:BA' in combined
     assert '<cols>' in combined
-    combined_headers = _worksheet_rows(output, 2)[0]
-    beginner_headers = _worksheet_rows(output, 3)[0]
-    combined_widths = _worksheet_column_widths(output, 2)
-    beginner_widths = _worksheet_column_widths(output, 3)
+    combined_headers = _worksheet_rows(output, combined_index)[0]
+    beginner_headers = _worksheet_rows(output, beginner_index)[0]
+    combined_widths = _worksheet_column_widths(output, combined_index)
+    beginner_widths = _worksheet_column_widths(output, beginner_index)
     combined_width_by_header = {header: combined_widths[index] for index, header in enumerate(combined_headers, start=1)}
     beginner_width_by_header = {header: beginner_widths[index] for index, header in enumerate(beginner_headers, start=1)}
     assert combined_width_by_header["phase_name"] == "22"
@@ -1480,7 +1488,8 @@ def test_cif2peaks_workbook_opens_with_chinese_user_guide(tmp_path: Path) -> Non
         guide_xml = archive.read(f"xl/worksheets/sheet{sheet_names.index('使用说明') + 1}.xml").decode("utf-8")
 
     assert 'name="使用说明"' in workbook
-    assert f'activeTab="{len(sheet_names) - 1}"' in workbook
+    assert 'name="工作峰表"' in workbook
+    assert f'activeTab="{sheet_names.index("工作峰表")}"' in workbook
     assert "默认参数" in guide_xml
     assert "推荐峰表" in guide_xml
     assert "Combined Peaks" in guide_xml
@@ -1498,7 +1507,7 @@ def test_cif2peaks_workbook_includes_beginner_chinese_peak_table(tmp_path: Path)
 
     with ZipFile(output) as archive:
         workbook = archive.read("xl/workbook.xml").decode("utf-8")
-    rows = _worksheet_rows(output, 3)
+    rows = _worksheet_rows_by_name(output, "推荐峰表")
 
     assert 'name="推荐峰表"' in workbook
     assert rows[0] == [
@@ -1577,9 +1586,11 @@ def test_cif2peaks_combined_peak_sheets_color_rows_by_phase(tmp_path: Path) -> N
 
     export_cif2peaks_workbook(Cif2PeaksExportPayload(phases, settings), output)
 
-    combined_rows = _worksheet_rows(output, 2)
-    combined_styles = _worksheet_cell_styles(output, 2)
-    beginner_styles = _worksheet_cell_styles(output, 3)
+    combined_index = _workbook_sheet_names(output).index("Combined Peaks") + 1
+    beginner_index = _workbook_sheet_names(output).index("推荐峰表") + 1
+    combined_rows = _worksheet_rows(output, combined_index)
+    combined_styles = _worksheet_cell_styles(output, combined_index)
+    beginner_styles = _worksheet_cell_styles(output, beginner_index)
     first_phase = combined_rows[1][0]
     second_phase_row = next(index for index, row in enumerate(combined_rows[1:], start=1) if row[0] != first_phase)
 
@@ -1605,8 +1616,9 @@ def test_cif2peaks_beginner_key_headers_follow_inserted_r_hkl_no_lp_columns(tmp_
 
     export_cif2peaks_workbook(Cif2PeaksExportPayload(phases, settings), output)
 
-    headers = _worksheet_rows(output, 3)[0]
-    header_styles = dict(zip(headers, _worksheet_cell_styles(output, 3)[0], strict=True))
+    beginner_index = _workbook_sheet_names(output).index("推荐峰表") + 1
+    headers = _worksheet_rows(output, beginner_index)[0]
+    header_styles = dict(zip(headers, _worksheet_cell_styles(output, beginner_index)[0], strict=True))
 
     assert header_styles["R因子 R_hkl_no_LP"] == "2"
     assert header_styles["1/R_hkl_no_LP"] == "2"
@@ -1655,6 +1667,8 @@ def test_cif2peaks_workbook_adds_result_reading_guidance_without_renaming_sheets
 
     assert "Combined Peaks" in sheet_names
     assert "推荐峰表" in sheet_names
+    assert "工作峰表" in sheet_names
+    assert "Structure" in sheet_names
     assert "Elastic Constants" in sheet_names
     assert "result_reading_order" in summary_text
     assert "warning_guidance" in summary_text
@@ -2519,7 +2533,7 @@ def test_gui_export_uses_custom_cif_display_names_and_preserves_original_cif_tra
 
     assert [row[0] for row in result.phase_rows] == ["Beta Ti sample A", "HCP Ti-Nb reference"]
 
-    combined_rows = _worksheet_rows(output, 2)
+    combined_rows = _worksheet_rows_by_name(output, "Combined Peaks")
     headers = combined_rows[0]
     phase_index = headers.index("phase_name")
     cif_name_index = headers.index("cif_name")
@@ -2768,8 +2782,9 @@ def test_simple_gui_export_filters_by_d_range_and_records_summary(tmp_path: Path
 
     assert result.output_path == output
     assert result.total_peaks > 0
-    combined_rows = _worksheet_rows(output, 2)
-    d_values = [float(row[5]) for row in combined_rows[1:]]
+    combined_rows = _worksheet_rows_by_name(output, "Combined Peaks")
+    d_index = combined_rows[0].index("d_A")
+    d_values = [float(row[d_index]) for row in combined_rows[1:]]
     assert d_values
     assert all(1.0 <= value <= 2.0 for value in d_values)
     summary = {row[0]: row[1] for row in _worksheet_rows(output, 1) if len(row) >= 2}
@@ -2885,3 +2900,170 @@ def test_load_elastic_matches_paired_cif_after_rename(tmp_path: Path) -> None:
     elastic = load_elastic_for_cif(cif)
     assert elastic is not None
     assert elastic.stiffness_matrix_GPa[0, 0] == pytest.approx(250.0)
+
+
+def test_overlap_records_only_pairs_inside_the_stated_window() -> None:
+    from cif2peaks.workbook_views import overlap_peak_records
+
+    rows = [
+        {
+            "phase_name": "alpha",
+            "hkl": "(1 0 0)",
+            "d_A": 2.000,
+            "two_theta_current_deg": 45.000,
+            "relative_intensity": 100,
+        },
+        {
+            "phase_name": "beta",
+            "hkl": "(1 1 0)",
+            "d_A": 2.001,
+            "two_theta_current_deg": 45.020,
+            "relative_intensity": 80,
+        },
+        {
+            "phase_name": "beta",
+            "hkl": "(2 0 0)",
+            "d_A": 1.200,
+            "two_theta_current_deg": 80.000,
+            "relative_intensity": 40,
+        },
+    ]
+
+    inside = overlap_peak_records(rows, delta_two_theta_deg=0.05, delta_d_A=0.005)
+    outside = overlap_peak_records(rows, delta_two_theta_deg=0.001, delta_d_A=0.0001)
+
+    assert len(inside) == 1
+    assert inside[0]["phase_a"] == "alpha"
+    assert inside[0]["phase_b"] == "beta"
+    assert inside[0]["hkl_b"] == "(1 1 0)"
+    assert inside[0]["match_by"] == "two_theta+d"
+    assert outside == []
+
+
+def test_workbook_includes_working_structure_and_conditional_overlap(tmp_path: Path) -> None:
+    service = Cif2PeaksService()
+    phases = [
+        service.load_phase(TI_BETA_CIF),
+        service.load_phase(TI_NB_HCP_CIF),
+        service.load_phase(TI_NB_ORTHO_CIF),
+    ]
+    settings = Cif2PeaksSettings()
+    service.simulate_phases(phases, settings)
+    output = tmp_path / "usable.xlsx"
+
+    export_cif2peaks_workbook(Cif2PeaksExportPayload(phases, settings), output)
+
+    names = _workbook_sheet_names(output)
+    assert names[1] == "工作峰表"
+    assert "Structure" in names
+    assert "Overlap" in names
+
+    working = _worksheet_rows_by_name(output, "工作峰表")
+    assert working[0] == [
+        "相名",
+        "晶面 hkl",
+        "d 间距 (Å)",
+        "2θ 当前设置 (°)",
+        "相对强度",
+        "多重性",
+        "提示",
+        "晶面法向杨氏模量 (GPa)",
+        "弹性常数状态",
+    ]
+    assert len(working) > 1
+    assert {row[0] for row in working[1:]} >= {phase.phase_name for phase in phases}
+
+    structure = _worksheet_rows_by_name(output, "Structure")
+    headers = structure[0]
+    by_phase = {row[headers.index("phase_name")]: row for row in structure[1:]}
+    ortho = by_phase["ti_nb_orthorhombic_cmcm_partial_occupancy"]
+    assert float(ortho[headers.index("a_A")]) > 0
+    assert ortho[headers.index("occupancy_status")] == "partial"
+    assert ortho[headers.index("occupancy_sites")]
+    assert by_phase["ti_beta_bcc_im3m"][headers.index("occupancy_status")] == "full"
+
+    overlap = _worksheet_rows_by_name(output, "Overlap")
+    assert overlap[0][0] == "overlap_rule"
+    assert overlap[1][0] == "delta_two_theta_deg"
+    header_row = next(row for row in overlap if row and row[0] == "phase_a")
+    data_rows = overlap[overlap.index(header_row) + 1 :]
+    window_tth = float(overlap[1][1])
+    window_d = float(overlap[2][1])
+    for row in data_rows:
+        assert float(row[header_row.index("delta_two_theta_deg")]) <= window_tth or float(
+            row[header_row.index("delta_d_A")]
+        ) <= window_d
+
+
+def test_single_phase_workbook_omits_overlap_sheet(tmp_path: Path) -> None:
+    service = Cif2PeaksService()
+    phase = service.load_phase(TI_BETA_CIF)
+    service.simulate_phase(phase, Cif2PeaksSettings())
+    output = tmp_path / "single.xlsx"
+
+    export_cif2peaks_workbook(Cif2PeaksExportPayload([phase], Cif2PeaksSettings()), output)
+
+    assert "Overlap" not in _workbook_sheet_names(output)
+    assert "工作峰表" in _workbook_sheet_names(output)
+    assert "Structure" in _workbook_sheet_names(output)
+
+
+def test_workbook_binds_sibling_cij_and_labels_missing_without_inventing(tmp_path: Path) -> None:
+    paired = tmp_path / "paired.cif"
+    missing = tmp_path / "missing.cif"
+    paired.write_text(TI_BETA_CIF.read_text(encoding="utf-8"), encoding="utf-8")
+    missing.write_text(TI_NB_HCP_CIF.read_text(encoding="utf-8"), encoding="utf-8")
+    (tmp_path / "paired_elasticity.json").write_text(
+        json.dumps(_phasescout_elasticity_payload()), encoding="utf-8"
+    )
+
+    service = Cif2PeaksService()
+    phases = service.load_phases([paired, missing], auto_elastic=True)
+    service.simulate_phases(phases, Cif2PeaksSettings())
+    output = tmp_path / "cij_bind.xlsx"
+    export_cif2peaks_workbook(Cif2PeaksExportPayload(phases, Cif2PeaksSettings()), output)
+
+    working = _worksheet_rows_by_name(output, "工作峰表")
+    headers = working[0]
+    modulus_i = headers.index("晶面法向杨氏模量 (GPa)")
+    status_i = headers.index("弹性常数状态")
+    by_phase = {}
+    for row in working[1:]:
+        by_phase.setdefault(row[0], row)
+    assert float(by_phase["paired"][modulus_i]) > 0
+    assert by_phase["paired"][status_i] in {"valid", "valid_with_warnings"}
+    assert by_phase["missing"][modulus_i] == ""
+    assert by_phase["missing"][status_i] == "no_elastic_constants"
+
+    elastic_rows = _worksheet_rows_by_name(output, "Elastic Constants")
+    elastic_headers = elastic_rows[0]
+    c11_i = elastic_headers.index("C11")
+    status_col = elastic_headers.index("elastic_status")
+    paired_row = next(row for row in elastic_rows[1:] if row[0] == "paired")
+    missing_row = next(row for row in elastic_rows[1:] if row[0] == "missing")
+    assert paired_row[c11_i] != ""
+    assert float(paired_row[c11_i]) == pytest.approx(250.0)
+    assert missing_row[status_col] == "no_elastic_constants"
+    assert missing_row[c11_i] == ""
+    assert all(missing_row[elastic_headers.index(f"C{i}{j}")] == "" for i in range(1, 7) for j in range(1, 7))
+
+
+def test_builtin_skills_instruct_cli_complete_table_without_gui() -> None:
+    local_skill = ROOT / ".grok" / "skills" / "cif2peaks-complete-table" / "SKILL.md"
+    phasescout_skill = ROOT.parent / "PhaseScout" / ".grok" / "skills" / "mp-possible-phases" / "SKILL.md"
+    text = local_skill.read_text(encoding="utf-8")
+    assert local_skill.is_file()
+    assert "python -m cif2peaks" in text or "-m cif2peaks" in text
+    assert "cif2peaks_complete.xlsx" in text
+    assert "Invent" in text or "invent" in text
+    assert "GUI" in text
+    assert "Do not" in text or "do not" in text
+    assert "open" in text.lower()
+    if phasescout_skill.is_file():
+        scout = phasescout_skill.read_text(encoding="utf-8")
+        assert "--elasticity" in scout
+        assert "-m cif2peaks" in scout
+        assert "cif2peaks_complete.xlsx" in scout
+        assert "do not stop at" in scout.lower() or "Do not stop" in scout or "不要停" in scout or "Do **not** stop" in scout
+        assert "Invent" in scout or "invent" in scout
+        assert "API key" in scout or "API keys" in scout
