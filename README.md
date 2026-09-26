@@ -35,6 +35,7 @@ py -3.11 -m pip install -e ".[dev]"
 cif2peaks-gui
 # or: py -3.11 -m cif2peaks.gui
 # Windows: start_cif2peaks.bat · quick_export_cif2peaks.bat · 启动CIF2Peaks.bat
+# Quick export entry point after install: cif2peaks-quick-export
 ```
 
 GUI flow: (1) drag CIF files/folders → (2) choose energy → (3) set *d*-range → (4) **Export Excel**.
