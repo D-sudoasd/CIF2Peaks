@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="assets/readme/hero.svg" width="100%" alt="CIF2Peaks: CIF to indexed theoretical powder XRD peak tables.">
+</p>
+
 # CIF2Peaks
 
 **把 CIF 晶体结构转换成带晶面索引的理论粉末 XRD 峰表。**
@@ -10,13 +14,12 @@ Indexed theoretical powder peaks for materials researchers using Excel, Origin, 
 
 [![MIT](https://img.shields.io/badge/License-MIT-455A64)](LICENSE) [![Python 3.11+](https://img.shields.io/badge/Python-3.11%2B-3776AB)](pyproject.toml)
 
-```mermaid
-flowchart TD
-  A[CIF 文件或目录] --> B[结构检查与辐射设置]
-  B --> C[pymatgen 理论衍射]
-  C --> D[带索引峰表与诊断]
-  D --> E[XLSX / CSV / JSON]
-```
+<picture>
+  <source media="(max-width: 600px)" srcset="assets/readme/diagrams/workflow-readme-md-1-mobile.svg">
+  <img src="assets/readme/diagrams/workflow-readme-md-1.svg" width="100%" alt="CIF2Peaks — workflow schematic / 流程示意图">
+</picture>
+
+<sub>[Editable diagram source / 可编辑图源](assets/readme/diagrams/workflow-readme-md-1.mmd)</sub>
 
 默认 Excel 从“工作峰表”打开，同时保存结构表；多相时可生成指定重叠窗口的对照表。输出是结构模型的理论参考，需要结合实验标定和实际样品判断。
 
