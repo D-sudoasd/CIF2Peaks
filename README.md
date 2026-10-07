@@ -1,22 +1,24 @@
-<p align="center">
-  <img src="assets/readme/hero.svg" width="100%" alt="CIF2Peaks: CIF to indexed theoretical powder XRD peak tables.">
-</p>
-
 # CIF2Peaks
 
-**CIF → indexed theoretical powder peak tables for Excel, Origin, and Python.**
+**把 CIF 晶体结构转换成带晶面索引的理论粉末 XRD 峰表。**
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
-[![Python 3.11+](https://img.shields.io/badge/Python-3.11%2B-green.svg)](https://www.python.org/downloads/)
-[![version](https://img.shields.io/badge/version-0.1.0-lightgrey.svg)](pyproject.toml)
+Indexed theoretical powder peaks for materials researchers using Excel, Origin, or Python: phase, `hkl`, `d`, 2θ, `q`, `g`, relative intensity, diagnostics, and optional hkl-normal Young’s modulus from supplied `Cij`.
 
-Batch-export phase, *hkl*, *d*, 2θ, *q*, *g*, relative intensity, structure warnings, and optional *hkl*-normal Young’s modulus when Cij is available.
+> **Archived / 已归档。** 源码与历史用法保留供查阅。当前 [DiffractScout 完整版](https://github.com/D-sudoasd/DiffractScout/blob/main/docs/REPLACEMENT_AUDIT.md)包含兼容工作台；计算引擎和强度结果仍应按对照文档区分。
 
-The default Excel workbook opens on **工作峰表** and also writes **Structure**; for two or more phases it adds **Overlap** (stated Δ2θ / Δd window).
+[安装与 GUI](#install--quick-start) · [CLI](#cli) · [CIF 示例](examples/cif/) · [输出范围](#scientific-boundary--what-it-is-not)
 
-<p align="center">
-  <img src="assets/readme/section-01-output.svg" width="100%" alt="01 Output: indexed peaks for Excel and Origin.">
-</p>
+[![MIT](https://img.shields.io/badge/License-MIT-455A64)](LICENSE) [![Python 3.11+](https://img.shields.io/badge/Python-3.11%2B-3776AB)](pyproject.toml)
+
+```mermaid
+flowchart TD
+  A[CIF 文件或目录] --> B[结构检查与辐射设置]
+  B --> C[pymatgen 理论衍射]
+  C --> D[带索引峰表与诊断]
+  D --> E[XLSX / CSV / JSON]
+```
+
+默认 Excel 从“工作峰表”打开，同时保存结构表；多相时可生成指定重叠窗口的对照表。输出是结构模型的理论参考，需要结合实验标定和实际样品判断。
 
 ## Features
 
