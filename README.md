@@ -23,6 +23,18 @@ Indexed theoretical powder peaks for materials researchers using Excel, Origin, 
 
 默认 Excel 从“工作峰表”打开，同时保存结构表；多相时可生成指定重叠窗口的对照表。输出是结构模型的理论参考，需要结合实验标定和实际样品判断。
 
+## 原理示意 / Principle schematic
+
+<p align="center">
+  <img src="assets/readme/principle.png" width="100%" alt="Crystal planes and theoretical indexed powder peak tables — conceptual schematic / 概念示意图">
+</p>
+
+*CIF 结构、辐射条件与 d 范围共同确定理论粉末峰参考，晶面族对应峰表中的 hkl、d、2θ 与相对强度。结构与峰线仅示意。*
+
+*CIF structure, radiation settings and d range define theoretical powder references; plane families correspond to hkl, d, 2θ and relative intensity columns. Structure and peaks are conceptual.*
+
+[查看完整示意图 / View full-size schematic](assets/readme/principle.png)
+
 ## Features
 
 - Drag-and-drop CIF files/folders (Tk + tkinterdnd2)
